@@ -3,14 +3,13 @@ import { type NextRequest } from 'next/server';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const SYSTEM_PROMPT = `Eres un asistente de cobranza inteligente para una empresa financiera colombiana.
+const BASE_PROMPT = `Eres un asistente de cobranza inteligente para una empresa financiera colombiana.
 Tu rol es ayudar a los clientes a entender su situación de deuda, opciones de pago y acuerdos de refinanciación.
 
 Instrucciones:
 - Responde siempre en español, con tono profesional pero empático
 - Si el cliente menciona dificultades económicas, muestra comprensión y explora opciones de pago
-- Puedes hablar de saldos, fechas de pago, historial y opciones de acuerdo
-- No inventes datos específicos de clientes — si no tienes la información, indícalo
+- Usa SIEMPRE los datos del cliente provistos en este prompt — nunca inventes ni corrijas cifras
 - Mantén las respuestas concisas (máximo 3-4 párrafos)
 - Este es un ambiente demo — los datos son ficticios y solo para demostración técnica`;
 
@@ -27,18 +26,20 @@ type StreamEvent =
   | { type: 'done'; conversationId: string };
 
 export async function POST(req: NextRequest) {
-  // Auth check
+  // Auth check — verify JWT and extract customerId
   const auth = req.headers.get('authorization');
   if (!auth?.startsWith('Bearer ')) {
     return Response.json({ error: 'No autorizado' }, { status: 401 });
   }
 
+  let customerId = '';
   try {
     const { jwtVerify } = await import('jose');
     const secret = new TextEncoder().encode(
       process.env.JWT_SECRET ?? 'dev-secret-change-in-prod',
     );
-    await jwtVerify(auth.slice(7), secret);
+    const { payload } = await jwtVerify(auth.slice(7), secret);
+    customerId = (payload.customerId as string | undefined) ?? '';
   } catch {
     return Response.json({ error: 'Token inválido o expirado' }, { status: 401 });
   }
@@ -56,10 +57,44 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'Mensaje requerido' }, { status: 400 });
   }
 
+  // Build system prompt — inject real customer data when available
+  let systemPrompt = BASE_PROMPT;
+  if (customerId && !customerId.startsWith('demo-') && process.env.DATABASE_URL) {
+    try {
+      const { db } = await import('@/lib/db');
+      const { customers } = await import('@/lib/db/schema');
+      const { eq } = await import('drizzle-orm');
+      const rows = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+      if (rows.length > 0) {
+        const c = rows[0];
+        const amount = Number(c.debtAmount).toLocaleString('es-CO');
+        const STATUS: Record<string, string> = {
+          active: 'Al día',
+          mora: 'En mora',
+          acuerdo: 'Acuerdo de pago activo',
+          pagado: 'Saldo pagado',
+        };
+        const lastContact = c.lastContactDate
+          ? new Date(c.lastContactDate).toLocaleDateString('es-CO')
+          : 'Sin registro';
+        systemPrompt += `\n\nDATOS REALES DEL CLIENTE AUTENTICADO:
+- Nombre: ${c.name}
+- Saldo actual: $${amount} COP
+- Estado de cuenta: ${STATUS[c.debtStatus ?? ''] ?? c.debtStatus}
+- Último contacto: ${lastContact}
+- Notas internas: ${c.notes ?? 'Sin notas'}
+
+Usa exclusivamente estos datos cuando el cliente pregunte por su cuenta. No corrijas ni redondees las cifras.`;
+      }
+    } catch {
+      // DB unavailable — continue with base prompt
+    }
+  }
+
   const newConversationId = conversationId ?? crypto.randomUUID();
 
   const messages = [
-    { role: 'system' as const, content: SYSTEM_PROMPT },
+    { role: 'system' as const, content: systemPrompt },
     ...history.map((m) => ({ role: m.role, content: m.content })),
     { role: 'user' as const, content: message.trim() },
   ];
