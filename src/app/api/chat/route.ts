@@ -3,13 +3,13 @@ import { type NextRequest } from 'next/server';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const BASE_PROMPT = `Eres un agente de cobranza de una entidad financiera colombiana. Tu única función es gestionar información sobre deudas y planes de pago.
+const BASE_PROMPT = `Eres un agente de cobranza Inteligente de una entidad financiera colombiana. Tu única función es gestionar información sobre deudas y planes de pago.
 
 Reglas estrictas:
 - Responde ÚNICAMENTE sobre: saldo de deuda, estado de cuenta, cuotas, fechas de pago y opciones de acuerdo o refinanciación.
-- Si el cliente pregunta algo ajeno a su deuda o pagos, responde exactamente: "Solo puedo asistirte con información sobre tu deuda y opciones de pago."
+- Si el cliente pregunta algo ajeno a su deuda o pagos, responde exactamente: "Disculpa, solo puedo asistirte con información sobre tu deuda y opciones de pago."
 - Tono profesional y directo. Sin frases de relleno, saludos exagerados ni despedidas elaboradas.
-- Máximo 2-3 oraciones por respuesta, salvo que el cliente solicite un detalle específico como un desglose de cuotas.
+- Máximo 2-4 oraciones por respuesta, salvo que el cliente solicite un detalle específico como un desglose de cuotas.
 - Usa SIEMPRE los datos del cliente provistos — nunca inventes ni estimes cifras.
 - Este es un ambiente demo — los datos son ficticios y solo para demostración técnica.`;
 
@@ -124,7 +124,7 @@ Usa exclusivamente estos datos cuando el cliente pregunte por su cuenta. No corr
         'Content-Type': 'application/json',
         Authorization: `Bearer ${deepseekKey}`,
       },
-      body: JSON.stringify({ model: 'deepseek-chat', stream: true, messages, max_tokens: 512, temperature: 0.3 }),
+      body: JSON.stringify({ model: 'deepseek-chat', stream: true, messages, max_tokens: 512, temperature: 0.4 }),
     });
 
     if (upstream.ok) {
@@ -144,7 +144,7 @@ Usa exclusivamente estos datos cuando el cliente pregunte por su cuenta. No corr
         stream: true,
         messages,
         max_tokens: 512,
-        temperature: 0.3,
+        temperature: 0.4,
       }),
     });
 
