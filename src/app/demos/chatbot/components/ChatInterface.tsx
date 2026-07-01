@@ -9,8 +9,10 @@ import type { Message, ToolCall } from '@/types';
 import { Loader2, Paperclip, Send, Trash2, X } from 'lucide-react';
 
 type StreamEvent =
-  | { type: 'text'; text: string }
+  | { type: 'status'; text: string }
+  | { type: 'tool_start'; name: string }
   | { type: 'tool_call'; name: string; arguments: Record<string, unknown>; result: unknown }
+  | { type: 'text'; text: string }
   | { type: 'done'; conversationId: string };
 
 async function parseFile(file: File, token: string): Promise<string | null> {
@@ -111,7 +113,6 @@ export function ChatInterface() {
       if (!reader) throw new Error('No response body');
 
       const dec = new TextDecoder();
-      const toolCalls: ToolCall[] = [];
       let buf = '';
 
       while (true) {
@@ -134,22 +135,51 @@ export function ChatInterface() {
             continue;
           }
 
-          if (event.type === 'text') {
+          if (event.type === 'status') {
             setMessages((prev) => {
               const next = [...prev];
               const last = next[next.length - 1];
               if (last?.role === 'assistant') {
-                next[next.length - 1] = { ...last, content: last.content + event.text };
+                next[next.length - 1] = { ...last, agentStep: event.text };
+              }
+              return next;
+            });
+          } else if (event.type === 'tool_start') {
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.role === 'assistant') {
+                next[next.length - 1] = {
+                  ...last,
+                  agentStep: undefined,
+                  toolCalls: [
+                    ...(last.toolCalls ?? []),
+                    { name: event.name, arguments: {}, result: null, status: 'running' as const },
+                  ],
+                };
               }
               return next;
             });
           } else if (event.type === 'tool_call') {
-            toolCalls.push({ name: event.name, arguments: event.arguments, result: event.result });
             setMessages((prev) => {
               const next = [...prev];
               const last = next[next.length - 1];
               if (last?.role === 'assistant') {
-                next[next.length - 1] = { ...last, toolCalls: [...toolCalls] };
+                const updated = (last.toolCalls ?? []).map((tc) =>
+                  tc.name === event.name && tc.status === 'running'
+                    ? { name: event.name, arguments: event.arguments, result: event.result, status: 'done' as const }
+                    : tc,
+                );
+                next[next.length - 1] = { ...last, toolCalls: updated };
+              }
+              return next;
+            });
+          } else if (event.type === 'text') {
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.role === 'assistant') {
+                next[next.length - 1] = { ...last, content: last.content + event.text, agentStep: undefined };
               }
               return next;
             });

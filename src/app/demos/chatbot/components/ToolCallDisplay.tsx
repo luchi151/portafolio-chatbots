@@ -2,10 +2,20 @@
 
 import { useState } from 'react';
 import type { ToolCall } from '@/types';
-import { ChevronDown, ChevronRight, Wrench } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Wrench } from 'lucide-react';
 
 export function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
   const [open, setOpen] = useState(false);
+
+  if (toolCall.status === 'running') {
+    return (
+      <div className="mb-1.5 flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/5 px-2.5 py-1.5 text-xs">
+        <Loader2 className="size-3 shrink-0 animate-spin text-accent" />
+        <span className="font-mono font-medium text-accent">{toolCall.name}</span>
+        <span className="text-muted-foreground">ejecutando...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="mb-1.5 rounded-lg border border-accent/30 bg-accent/5 text-xs">
@@ -22,10 +32,14 @@ export function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
       </button>
       {open && (
         <div className="border-t border-accent/20 px-2.5 py-2 font-mono">
-          <p className="mb-1 text-muted-foreground">Input:</p>
-          <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-foreground/80">
-            {JSON.stringify(toolCall.arguments, null, 2)}
-          </pre>
+          {Object.keys(toolCall.arguments).length > 0 && (
+            <>
+              <p className="mb-1 text-muted-foreground">Input:</p>
+              <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-foreground/80">
+                {JSON.stringify(toolCall.arguments, null, 2)}
+              </pre>
+            </>
+          )}
           {toolCall.result !== null && (
             <>
               <p className="mb-1 mt-2 text-muted-foreground">Output:</p>

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import type { Message } from '@/types';
 import { ToolCallDisplay } from './ToolCallDisplay';
-import { Bot, User } from 'lucide-react';
+import { Bot, Loader2, User } from 'lucide-react';
 
 interface Props {
   messages: Message[];
@@ -79,7 +79,15 @@ export function MessageList({ messages, isStreaming }: Props) {
                 </div>
               )}
 
-              {/* Text content or streaming dots */}
+              {/* Agent step indicator */}
+              {msg.agentStep && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  <Loader2 className="size-3 shrink-0 animate-spin" />
+                  <span>{msg.agentStep}</span>
+                </div>
+              )}
+
+              {/* Text bubble */}
               {msg.content ? (
                 <div
                   className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
@@ -93,7 +101,7 @@ export function MessageList({ messages, isStreaming }: Props) {
                     <span className="ml-1 inline-block size-1.5 animate-pulse rounded-full bg-current align-middle" />
                   )}
                 </div>
-              ) : streaming ? (
+              ) : streaming && !msg.agentStep && !msg.toolCalls?.length ? (
                 <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-3">
                   <span className="flex gap-1">
                     {[0, 1, 2].map((j) => (

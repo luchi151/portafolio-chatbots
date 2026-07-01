@@ -6,6 +6,7 @@ export interface ToolCall {
   name: string;
   arguments: Record<string, unknown>;
   result: unknown;
+  status?: 'running' | 'done';
 }
 
 export interface Message {
@@ -13,6 +14,7 @@ export interface Message {
   content: string;
   timestamp: string;
   toolCalls?: ToolCall[];
+  agentStep?: string;
 }
 
 export interface ChatResponse {

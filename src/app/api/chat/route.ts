@@ -12,6 +12,7 @@ Reglas estrictas:
 - Tono profesional y directo. Sin frases de relleno, saludos exagerados ni despedidas elaboradas.
 - Máximo 2-4 oraciones por respuesta, salvo que el cliente solicite un detalle específico como un desglose de cuotas.
 - Usa SIEMPRE los datos del cliente provistos — nunca inventes ni estimes cifras.
+- No repitas una herramienta que ya ejecutaste en esta conversación si la información sigue siendo válida.
 - Este es un ambiente demo — los datos son ficticios y solo para demostración técnica.`;
 
 const STATUS_MAP: Record<string, string> = {
@@ -21,7 +22,7 @@ const STATUS_MAP: Record<string, string> = {
   pagado: 'Saldo pagado',
 };
 
-// ─── Tool definitions (OpenAI-compatible function calling) ────────────────────
+// ─── Tool definitions ─────────────────────────────────────────────────────────
 
 const TOOLS = [
   {
@@ -83,7 +84,6 @@ interface OAIResponse {
       content: string | null;
       tool_calls?: OAIToolCall[];
     };
-    finish_reason?: string;
   }>;
 }
 
@@ -100,8 +100,10 @@ interface RequestBody {
 }
 
 type StreamEvent =
-  | { type: 'text'; text: string }
+  | { type: 'status'; text: string }
+  | { type: 'tool_start'; name: string }
   | { type: 'tool_call'; name: string; arguments: Record<string, unknown>; result: unknown }
+  | { type: 'text'; text: string }
   | { type: 'done'; conversationId: string };
 
 // ─── Tool executor ────────────────────────────────────────────────────────────
@@ -121,7 +123,7 @@ function executeTool(name: string, args: Record<string, unknown>, customer: Cust
 
     case 'calcular_plan_pago': {
       const cuotas = (args.cuotas as number) ?? 6;
-      const tasa = 0.025; // 2.5% mensual
+      const tasa = 0.025;
       const cuotaMensual = (debt * tasa * Math.pow(1 + tasa, cuotas)) / (Math.pow(1 + tasa, cuotas) - 1);
       return {
         cuotas,
@@ -175,7 +177,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'Mensaje requerido' }, { status: 400 });
   }
 
-  // Load customer data from DB when available
+  // Load customer from DB when available
   let customer: CustomerData | null = null;
   let systemPrompt = BASE_PROMPT;
   if (customerId && !customerId.startsWith('demo-') && process.env.DATABASE_URL) {
@@ -222,131 +224,121 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
   const groqKey = process.env.GROQ_API_KEY;
 
   if (!deepseekKey && !groqKey) {
-    return buildPlainStream(
-      '⚠️ Demo no configurada: agrega DEEPSEEK_API_KEY o GROQ_API_KEY en .env.local.',
-      newConversationId,
-    );
+    return buildStream((emit) => {
+      emit({ type: 'text', text: '⚠️ Demo no configurada: agrega DEEPSEEK_API_KEY o GROQ_API_KEY en .env.local.' });
+    }, newConversationId);
   }
 
   const provider = deepseekKey
     ? { url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', key: deepseekKey }
     : { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.1-70b-versatile', key: groqKey! };
 
-  const basePayload = { model: provider.model, temperature: 0.4, max_tokens: 512 };
-  const authHeader = { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` };
+  return buildStream(async (emit) => {
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` };
+    const base = { model: provider.model, temperature: 0.4, max_tokens: 512 };
 
-  // Step 1: Non-streaming call with tools to detect which tools the model wants to invoke
-  let step1Data: OAIResponse;
-  try {
-    const res = await fetch(provider.url, {
+    // Step 1: non-streaming call with tools — model decides what to invoke
+    emit({ type: 'status', text: 'Analizando consulta...' });
+
+    const step1Res = await fetch(provider.url, {
       method: 'POST',
-      headers: authHeader,
-      body: JSON.stringify({ ...basePayload, messages, tools: TOOLS, tool_choice: 'auto' }),
+      headers,
+      body: JSON.stringify({ ...base, messages, tools: TOOLS, tool_choice: 'auto' }),
     });
-    if (!res.ok) throw new Error(`LLM error ${res.status}`);
-    step1Data = (await res.json()) as OAIResponse;
-  } catch {
-    return Response.json({ error: 'No se pudo conectar con el LLM' }, { status: 502 });
-  }
 
-  const assistantMsg = step1Data.choices?.[0]?.message;
-  const rawToolCalls = assistantMsg?.tool_calls ?? [];
+    if (!step1Res.ok) {
+      emit({ type: 'text', text: 'No se pudo conectar con el agente.' });
+      return;
+    }
 
-  // If the model answered directly without tools, stream that response
-  if (rawToolCalls.length === 0 && assistantMsg?.content) {
-    return buildPlainStream(assistantMsg.content, newConversationId);
-  }
+    const step1Data = (await step1Res.json()) as OAIResponse;
+    const assistantMsg = step1Data.choices?.[0]?.message;
+    const rawToolCalls = assistantMsg?.tool_calls ?? [];
 
-  // Step 2: Execute tools and collect stream events + tool result messages
-  const toolEvents: StreamEvent[] = [];
-  const toolResultMsgs: LLMMessage[] = [];
+    // No tool calls — model answered directly
+    if (rawToolCalls.length === 0) {
+      if (assistantMsg?.content) emit({ type: 'text', text: assistantMsg.content });
+      return;
+    }
 
-  for (const tc of rawToolCalls) {
-    let args: Record<string, unknown> = {};
-    try { args = JSON.parse(tc.function.arguments) as Record<string, unknown>; } catch { /* malformed args */ }
+    // Step 2: execute tools one by one, emitting events as each completes
+    const toolResultMsgs: LLMMessage[] = [];
+    for (const tc of rawToolCalls) {
+      let args: Record<string, unknown> = {};
+      try { args = JSON.parse(tc.function.arguments) as Record<string, unknown>; } catch { /* ignore */ }
 
-    const result = executeTool(tc.function.name, args, customer);
-    toolEvents.push({ type: 'tool_call', name: tc.function.name, arguments: args, result });
-    toolResultMsgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
-  }
+      emit({ type: 'tool_start', name: tc.function.name });
+      const result = executeTool(tc.function.name, args, customer);
+      emit({ type: 'tool_call', name: tc.function.name, arguments: args, result });
+      toolResultMsgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
+    }
 
-  // Step 3: Streaming call with tool results injected
-  const messages2: LLMMessage[] = [
-    ...messages,
-    { role: 'assistant', content: assistantMsg?.content ?? null, tool_calls: rawToolCalls },
-    ...toolResultMsgs,
-  ];
+    emit({ type: 'status', text: 'Generando respuesta...' });
 
-  let step2Res: Response;
-  try {
-    step2Res = await fetch(provider.url, {
+    // Step 3: streaming call with tool results
+    const messages2: LLMMessage[] = [
+      ...messages,
+      { role: 'assistant', content: assistantMsg?.content ?? null, tool_calls: rawToolCalls },
+      ...toolResultMsgs,
+    ];
+
+    const step2Res = await fetch(provider.url, {
       method: 'POST',
-      headers: authHeader,
-      body: JSON.stringify({ ...basePayload, messages: messages2, stream: true }),
+      headers,
+      body: JSON.stringify({ ...base, messages: messages2, stream: true }),
     });
-    if (!step2Res.ok) throw new Error(`LLM stream error ${step2Res.status}`);
-  } catch {
-    return Response.json({ error: 'No se pudo conectar con el LLM' }, { status: 502 });
-  }
 
-  return buildAgentStream(toolEvents, step2Res, newConversationId);
+    if (!step2Res.ok) {
+      emit({ type: 'text', text: 'Error al generar la respuesta.' });
+      return;
+    }
+
+    // Pipe streaming chunks
+    const reader = step2Res.body!.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') continue;
+        try {
+          const chunk = JSON.parse(raw) as { choices?: Array<{ delta?: { content?: string } }> };
+          const text = chunk.choices?.[0]?.delta?.content;
+          if (text) emit({ type: 'text', text });
+        } catch { /* ignore malformed chunks */ }
+      }
+    }
+  }, newConversationId);
 }
 
-// ─── Stream builders ──────────────────────────────────────────────────────────
+// ─── Stream builder ───────────────────────────────────────────────────────────
 
-function buildPlainStream(text: string, conversationId: string): Response {
+function buildStream(
+  run: (emit: (evt: StreamEvent) => void) => void | Promise<void>,
+  conversationId: string,
+): Response {
   const enc = new TextEncoder();
-  const payload =
-    'data: ' + JSON.stringify({ type: 'text', text } satisfies StreamEvent) + '\n\n' +
-    'data: ' + JSON.stringify({ type: 'done', conversationId } satisfies StreamEvent) + '\n\n';
-  const stream = new ReadableStream({
-    start(ctrl) { ctrl.enqueue(enc.encode(payload)); ctrl.close(); },
-  });
-  return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
-}
-
-function buildAgentStream(toolEvents: StreamEvent[], upstream: Response, conversationId: string): Response {
-  const enc = new TextEncoder();
-  const reader = upstream.body!.getReader();
-  const dec = new TextDecoder();
 
   const stream = new ReadableStream({
     async start(ctrl) {
-      // Emit tool call events before the text response
-      for (const evt of toolEvents) {
+      const emit = (evt: StreamEvent) =>
         ctrl.enqueue(enc.encode('data: ' + JSON.stringify(evt) + '\n\n'));
-      }
 
-      // Pipe the LLM streaming response
-      let buf = '';
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += dec.decode(value, { stream: true });
-          const lines = buf.split('\n');
-          buf = lines.pop() ?? '';
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const raw = line.slice(6).trim();
-            if (raw === '[DONE]') continue;
-            try {
-              const chunk = JSON.parse(raw) as { choices?: Array<{ delta?: { content?: string } }> };
-              const text = chunk.choices?.[0]?.delta?.content;
-              if (text) {
-                ctrl.enqueue(enc.encode('data: ' + JSON.stringify({ type: 'text', text } satisfies StreamEvent) + '\n\n'));
-              }
-            } catch { /* ignore malformed chunks */ }
-          }
-        }
-        ctrl.enqueue(enc.encode('data: ' + JSON.stringify({ type: 'done', conversationId } satisfies StreamEvent) + '\n\n'));
+        await run(emit);
       } catch {
-        ctrl.enqueue(enc.encode('data: ' + JSON.stringify({ type: 'text', text: '\n\nError al procesar la respuesta.' } satisfies StreamEvent) + '\n\n'));
+        emit({ type: 'text', text: 'Error al procesar la solicitud.' });
       } finally {
+        emit({ type: 'done', conversationId });
         ctrl.close();
       }
     },
-    cancel() { void reader.cancel(); },
   });
 
   return new Response(stream, {
