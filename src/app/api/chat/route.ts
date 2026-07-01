@@ -3,15 +3,15 @@ import { type NextRequest } from 'next/server';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const BASE_PROMPT = `Eres un asistente de cobranza inteligente para una empresa financiera colombiana.
-Tu rol es ayudar a los clientes a entender su situación de deuda, opciones de pago y acuerdos de refinanciación.
+const BASE_PROMPT = `Eres un agente de cobranza de una entidad financiera colombiana. Tu única función es gestionar información sobre deudas y planes de pago.
 
-Instrucciones:
-- Responde siempre en español, con tono profesional pero empático
-- Si el cliente menciona dificultades económicas, muestra comprensión y explora opciones de pago
-- Usa SIEMPRE los datos del cliente provistos en este prompt — nunca inventes ni corrijas cifras
-- Mantén las respuestas concisas (máximo 3-4 párrafos)
-- Este es un ambiente demo — los datos son ficticios y solo para demostración técnica`;
+Reglas estrictas:
+- Responde ÚNICAMENTE sobre: saldo de deuda, estado de cuenta, cuotas, fechas de pago y opciones de acuerdo o refinanciación.
+- Si el cliente pregunta algo ajeno a su deuda o pagos, responde exactamente: "Solo puedo asistirte con información sobre tu deuda y opciones de pago."
+- Tono profesional y directo. Sin frases de relleno, saludos exagerados ni despedidas elaboradas.
+- Máximo 2-3 oraciones por respuesta, salvo que el cliente solicite un detalle específico como un desglose de cuotas.
+- Usa SIEMPRE los datos del cliente provistos — nunca inventes ni estimes cifras.
+- Este es un ambiente demo — los datos son ficticios y solo para demostración técnica.`;
 
 type HistoryItem = { role: 'user' | 'assistant'; content: string };
 
@@ -124,7 +124,7 @@ Usa exclusivamente estos datos cuando el cliente pregunte por su cuenta. No corr
         'Content-Type': 'application/json',
         Authorization: `Bearer ${deepseekKey}`,
       },
-      body: JSON.stringify({ model: 'deepseek-chat', stream: true, messages, max_tokens: 1024, temperature: 0.7 }),
+      body: JSON.stringify({ model: 'deepseek-chat', stream: true, messages, max_tokens: 512, temperature: 0.3 }),
     });
 
     if (upstream.ok) {
@@ -143,8 +143,8 @@ Usa exclusivamente estos datos cuando el cliente pregunte por su cuenta. No corr
         model: 'llama-3.1-70b-versatile',
         stream: true,
         messages,
-        max_tokens: 1024,
-        temperature: 0.7,
+        max_tokens: 512,
+        temperature: 0.3,
       }),
     });
 
