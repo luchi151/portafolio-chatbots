@@ -65,6 +65,7 @@ export function VoicebotInterface() {
   const finalTranscriptRef = useRef('');
   const shouldProcessRef = useRef(false);
   const conversationRef = useRef<ConversationTurn[]>([]);
+  const conversationIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     conversationRef.current = conversation;
@@ -101,7 +102,12 @@ export function VoicebotInterface() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ message: transcript, history, demo: 'voicebot' }),
+        body: JSON.stringify({
+          message: transcript,
+          history,
+          demo: 'voicebot',
+          conversationId: conversationIdRef.current,
+        }),
       });
 
       if (!res.ok) {
@@ -132,8 +138,9 @@ export function VoicebotInterface() {
           const raw = line.slice(6).trim();
           if (raw === '[DONE]') continue;
           try {
-            const evt = JSON.parse(raw) as { type: string; text?: string };
+            const evt = JSON.parse(raw) as { type: string; text?: string; conversationId?: string };
             if (evt.type === 'text' && evt.text) fullText += evt.text;
+            if (evt.type === 'done' && evt.conversationId) conversationIdRef.current = evt.conversationId;
           } catch { /* ignore malformed chunks */ }
         }
       }
@@ -218,6 +225,7 @@ export function VoicebotInterface() {
     window.speechSynthesis?.cancel();
     finalTranscriptRef.current = '';
     shouldProcessRef.current = false;
+    conversationIdRef.current = undefined;
     setConversation([]);
     setStatus('idle');
     setInterim('');

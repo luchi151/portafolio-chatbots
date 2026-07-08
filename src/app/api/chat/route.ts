@@ -161,15 +161,47 @@ function logConversation(
     try {
       const { db } = await import('@/lib/db');
       const { conversations } = await import('@/lib/db/schema');
-      await db.insert(conversations).values({
-        demoType: demo,
-        sessionId: conversationId,
-        messages: [
-          { role: 'user', content: userMessage },
-          { role: 'assistant', content: assistantText },
-        ],
-        metadata: { event: 'message_sent', toolsUsed, hasCustomer },
-      });
+      const { and, eq } = await import('drizzle-orm');
+
+      const newTurn = [
+        { role: 'user', content: userMessage },
+        { role: 'assistant', content: assistantText },
+      ];
+
+      // All turns of one session share `conversationId` — accumulate them onto a
+      // single row instead of one row per turn, so the dashboard/table reflects
+      // full conversations rather than disconnected message pairs.
+      const existing = await db
+        .select({ id: conversations.id, messages: conversations.messages, metadata: conversations.metadata })
+        .from(conversations)
+        .where(and(eq(conversations.demoType, demo), eq(conversations.sessionId, conversationId)))
+        .limit(1);
+
+      if (existing.length > 0) {
+        const row = existing[0];
+        const prevMessages = Array.isArray(row.messages) ? row.messages : [];
+        const prevMeta = (row.metadata as { toolsUsed?: string[]; hasCustomer?: boolean } | null) ?? {};
+
+        await db
+          .update(conversations)
+          .set({
+            messages: [...prevMessages, ...newTurn],
+            metadata: {
+              event: 'message_sent',
+              toolsUsed: [...(prevMeta.toolsUsed ?? []), ...toolsUsed],
+              hasCustomer: prevMeta.hasCustomer || hasCustomer,
+            },
+            updatedAt: new Date(),
+          })
+          .where(eq(conversations.id, row.id));
+      } else {
+        await db.insert(conversations).values({
+          demoType: demo,
+          sessionId: conversationId,
+          messages: newTurn,
+          metadata: { event: 'message_sent', toolsUsed, hasCustomer },
+        });
+      }
     } catch (err) {
       console.error('[chat] log error:', err);
     }

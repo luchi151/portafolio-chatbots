@@ -10,13 +10,13 @@ export function Navbar() {
         </Link>
         <div className="flex items-center gap-4">
           <Link
-            href="#demos"
+            href="/#demos"
             className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block"
           >
             Demos
           </Link>
           <Link
-            href="#stack"
+            href="/#stack"
             className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block"
           >
             Stack
