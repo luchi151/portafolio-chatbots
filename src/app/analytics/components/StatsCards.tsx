@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { DbQueryStats, DemoCount, ToolUsageCount } from '@/lib/db/analytics-queries';
+import type { DbQueryStats, DemoCount, EscalationStats, ToolUsageCount } from '@/lib/db/analytics-queries';
 
 const DEMO_LABELS: Record<string, { label: string; color: string }> = {
   chatbot: { label: 'Chatbot de cobranza', color: '#3b82f6' },
@@ -11,14 +11,15 @@ interface Props {
   demoCounts: DemoCount[];
   toolUsage: ToolUsageCount[];
   dbStats: DbQueryStats;
+  escalationStats: EscalationStats;
 }
 
-export function StatsCards({ demoCounts, toolUsage, dbStats }: Props) {
+export function StatsCards({ demoCounts, toolUsage, dbStats, escalationStats }: Props) {
   const total = demoCounts.reduce((sum, d) => sum + d.count, 0);
   const totalToolCalls = toolUsage.reduce((sum, t) => sum + t.count, 0);
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">Total interacciones</CardTitle>
@@ -64,6 +65,16 @@ export function StatsCards({ demoCounts, toolUsage, dbStats }: Props) {
         </CardHeader>
         <CardContent>
           <p className="text-3xl font-bold">{totalToolCalls}</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Escalados a asesor</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-3xl font-bold">{escalationStats.totalEscalated}</p>
+          <p className="text-xs text-muted-foreground">{escalationStats.escalationRate}% de las conversaciones</p>
         </CardContent>
       </Card>
     </div>

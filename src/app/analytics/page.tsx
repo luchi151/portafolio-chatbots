@@ -5,6 +5,7 @@ import {
   getDbQueryStats,
   getDailyActivity,
   getDemoCounts,
+  getEscalationStats,
   getToolUsage,
 } from '@/lib/db/analytics-queries';
 import { StatsCards } from './components/StatsCards';
@@ -15,11 +16,12 @@ import { ToolUsageChart } from './components/ToolUsageChart';
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
-  const [demoCounts, dailyActivity, toolUsage, dbStats] = await Promise.all([
+  const [demoCounts, dailyActivity, toolUsage, dbStats, escalationStats] = await Promise.all([
     getDemoCounts(),
     getDailyActivity(),
     getToolUsage(),
     getDbQueryStats(),
+    getEscalationStats(),
   ]);
 
   return (
@@ -33,7 +35,12 @@ export default async function AnalyticsPage() {
           </p>
 
           <div className="flex flex-col gap-6">
-            <StatsCards demoCounts={demoCounts} toolUsage={toolUsage} dbStats={dbStats} />
+            <StatsCards
+              demoCounts={demoCounts}
+              toolUsage={toolUsage}
+              dbStats={dbStats}
+              escalationStats={escalationStats}
+            />
 
             <Card>
               <CardHeader>

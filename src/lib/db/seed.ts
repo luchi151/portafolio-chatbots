@@ -441,6 +441,38 @@ const CONVERSATIONS: (typeof conversations.$inferInsert)[] = [
     ],
     metadata: { event: 'message_sent', toolsUsed: ['consultar_cuenta', 'verificar_mora'], hasCustomer: true },
   },
+  {
+    demoType: 'chatbot',
+    sessionId: 'demo-session-023',
+    createdAt: daysAgo(2),
+    messages: [
+      { role: 'user', content: 'Esto es un error, yo ya pagué esa cuota el mes pasado y me la siguen cobrando' },
+      { role: 'assistant', content: 'Entiendo tu inconformidad. Como se trata de una disputa sobre un pago ya realizado, voy a escalar tu caso a un asesor humano para que revise el comprobante. Un asesor te contactará en las próximas 24 horas.' },
+    ],
+    metadata: {
+      event: 'message_sent',
+      toolsUsed: ['verificar_mora', 'escalar_a_agente'],
+      hasCustomer: true,
+      escalated: true,
+      escalationReason: 'Disputa de pago ya realizado',
+    },
+  },
+  {
+    demoType: 'voicebot',
+    sessionId: 'demo-session-024',
+    createdAt: daysAgo(4),
+    messages: [
+      { role: 'user', content: '[Voz] Quiero hablar con una persona, no con un robot' },
+      { role: 'assistant', content: '[Audio] Entiendo. He escalado tu caso a un asesor humano, quien se comunicará contigo pronto.' },
+    ],
+    metadata: {
+      event: 'message_sent',
+      toolsUsed: ['escalar_a_agente'],
+      hasCustomer: true,
+      escalated: true,
+      escalationReason: 'Solicitud explícita de agente humano',
+    },
+  },
 ];
 
 // ─── Main ─────────────────────────────────────────────────────────────────────

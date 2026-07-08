@@ -11,6 +11,7 @@ const TOOL_LABELS: Record<string, string> = {
   consultar_cuenta: 'Consultar cuenta',
   calcular_plan_pago: 'Calcular plan de pago',
   verificar_mora: 'Verificar mora',
+  escalar_a_agente: 'Escalar a agente',
 };
 
 export function ToolUsageChart({ data }: Props) {

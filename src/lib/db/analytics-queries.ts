@@ -33,6 +33,11 @@ export interface DbQueryStats {
   avgExecutionTimeMs: number;
 }
 
+export interface EscalationStats {
+  totalEscalated: number;
+  escalationRate: number; // % of chatbot + voicebot conversations
+}
+
 // Row volume for a portfolio demo is small — fetch the relevant columns once
 // and aggregate in JS rather than reaching for raw SQL (date_trunc,
 // jsonb_array_elements_text) for a handful of dashboard numbers.
@@ -126,5 +131,31 @@ export async function getDbQueryStats(): Promise<DbQueryStats> {
   } catch (err) {
     console.error('[analytics] getDbQueryStats error:', err);
     return { totalQueries: 0, avgExecutionTimeMs: 0 };
+  }
+}
+
+export async function getEscalationStats(): Promise<EscalationStats> {
+  try {
+    const db = await getDb();
+    const rows = await db
+      .select({ demoType: conversations.demoType, metadata: conversations.metadata })
+      .from(conversations);
+
+    let conversational = 0;
+    let escalated = 0;
+    for (const r of rows) {
+      if (r.demoType !== 'chatbot' && r.demoType !== 'voicebot') continue;
+      conversational += 1;
+      const meta = r.metadata as { escalated?: unknown };
+      if (meta?.escalated === true) escalated += 1;
+    }
+
+    return {
+      totalEscalated: escalated,
+      escalationRate: conversational > 0 ? Math.round((escalated / conversational) * 100) : 0,
+    };
+  } catch (err) {
+    console.error('[analytics] getEscalationStats error:', err);
+    return { totalEscalated: 0, escalationRate: 0 };
   }
 }

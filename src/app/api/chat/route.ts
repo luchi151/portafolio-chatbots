@@ -13,6 +13,7 @@ Reglas estrictas:
 - Máximo 2-4 oraciones por respuesta, salvo que el cliente solicite un detalle específico como un desglose de cuotas.
 - Usa SIEMPRE los datos del cliente provistos — nunca inventes ni estimes cifras.
 - No repitas una herramienta que ya ejecutaste en esta conversación si la información sigue siendo válida.
+- Si el cliente disputa formalmente un cobro (ej. dice que ya pagó, que el monto está mal), pide explícitamente hablar con una persona/asesor humano, o plantea un caso que las demás herramientas no cubren (fraude, queja formal, negociación especial), usa la herramienta escalar_a_agente indicando el motivo y comunica al cliente que un asesor humano se pondrá en contacto.
 - Este es un ambiente demo — los datos son ficticios y solo para demostración técnica.`;
 
 const STATUS_MAP: Record<string, string> = {
@@ -57,6 +58,23 @@ const TOOLS = [
       name: 'verificar_mora',
       description: 'Verifica si la cuenta está en mora y el estado detallado del cliente.',
       parameters: { type: 'object' as const, properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'escalar_a_agente',
+      description: 'Transfiere la conversación a un asesor humano cuando el caso no puede resolverse con las demás herramientas (disputa de cobro, solicitud explícita de un humano, queja formal, fraude).',
+      parameters: {
+        type: 'object' as const,
+        properties: {
+          motivo: {
+            type: 'string',
+            description: 'Motivo breve de la escalación, ej. "disputa de pago ya realizado" o "solicitud explícita de agente humano".',
+          },
+        },
+        required: ['motivo'],
+      },
     },
   },
 ];
@@ -141,6 +159,16 @@ function executeTool(name: string, args: Record<string, unknown>, customer: Cust
         notas: customer?.notes ?? null,
       };
 
+    case 'escalar_a_agente': {
+      const motivo = typeof args.motivo === 'string' ? args.motivo : 'No especificado';
+      return {
+        escalado: true,
+        ticket_id: `ESC-${Date.now().toString(36).toUpperCase()}`,
+        motivo,
+        mensaje: 'Caso transferido a un asesor humano. Contacto en las próximas 24 horas.',
+      };
+    }
+
     default:
       return { error: 'Herramienta no reconocida' };
   }
@@ -155,6 +183,8 @@ async function logConversation(
   assistantText: string,
   toolsUsed: string[],
   hasCustomer: boolean,
+  escalated: boolean,
+  escalationReason: string | null,
 ): Promise<void> {
   if (!process.env.DATABASE_URL) return;
   try {
@@ -179,7 +209,13 @@ async function logConversation(
     if (existing.length > 0) {
       const row = existing[0];
       const prevMessages = Array.isArray(row.messages) ? row.messages : [];
-      const prevMeta = (row.metadata as { toolsUsed?: string[]; hasCustomer?: boolean } | null) ?? {};
+      const prevMeta =
+        (row.metadata as {
+          toolsUsed?: string[];
+          hasCustomer?: boolean;
+          escalated?: boolean;
+          escalationReason?: string | null;
+        } | null) ?? {};
 
       await db
         .update(conversations)
@@ -189,6 +225,10 @@ async function logConversation(
             event: 'message_sent',
             toolsUsed: [...(prevMeta.toolsUsed ?? []), ...toolsUsed],
             hasCustomer: prevMeta.hasCustomer || hasCustomer,
+            // Escalation is sticky — once a session is escalated it stays flagged,
+            // keeping the original reason unless a later turn escalates again.
+            escalated: prevMeta.escalated || escalated,
+            escalationReason: escalated ? escalationReason : (prevMeta.escalationReason ?? null),
           },
           updatedAt: new Date(),
         })
@@ -198,7 +238,7 @@ async function logConversation(
         demoType: demo,
         sessionId: conversationId,
         messages: newTurn,
-        metadata: { event: 'message_sent', toolsUsed, hasCustomer },
+        metadata: { event: 'message_sent', toolsUsed, hasCustomer, escalated, escalationReason },
       });
     }
   } catch (err) {
@@ -319,15 +359,24 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
     // No tool calls — model answered directly
     if (rawToolCalls.length === 0) {
       if (assistantMsg?.content) emit({ type: 'text', text: assistantMsg.content });
-      after(() => logConversation(demo, newConversationId, message.trim(), assistantMsg?.content ?? '', [], !!customer));
+      after(() =>
+        logConversation(demo, newConversationId, message.trim(), assistantMsg?.content ?? '', [], !!customer, false, null),
+      );
       return;
     }
 
     // Step 2: execute tools one by one, emitting events as each completes
     const toolResultMsgs: LLMMessage[] = [];
+    let escalated = false;
+    let escalationReason: string | null = null;
     for (const tc of rawToolCalls) {
       let args: Record<string, unknown> = {};
       try { args = JSON.parse(tc.function.arguments) as Record<string, unknown>; } catch { /* ignore */ }
+
+      if (tc.function.name === 'escalar_a_agente') {
+        escalated = true;
+        escalationReason = typeof args.motivo === 'string' ? args.motivo : 'No especificado';
+      }
 
       emit({ type: 'tool_start', name: tc.function.name });
       const result = executeTool(tc.function.name, args, customer);
@@ -389,6 +438,8 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
         assistantText,
         rawToolCalls.map((tc) => tc.function.name),
         !!customer,
+        escalated,
+        escalationReason,
       ),
     );
   }, newConversationId);
