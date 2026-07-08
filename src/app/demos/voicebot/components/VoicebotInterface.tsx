@@ -101,7 +101,7 @@ export function VoicebotInterface() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ message: transcript, history }),
+        body: JSON.stringify({ message: transcript, history, demo: 'voicebot' }),
       });
 
       if (!res.ok) {

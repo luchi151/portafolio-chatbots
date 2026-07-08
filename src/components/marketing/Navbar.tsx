@@ -22,6 +22,12 @@ export function Navbar() {
             Stack
           </Link>
           <Link
+            href="/analytics"
+            className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block"
+          >
+            Analytics
+          </Link>
+          <Link
             href="mailto:luis.calderonf@cun.edu.co"
             className={buttonVariants({ size: 'sm' })}
           >

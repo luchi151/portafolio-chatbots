@@ -97,6 +97,7 @@ interface RequestBody {
   message: string;
   history?: HistoryItem[];
   conversationId?: string;
+  demo?: 'chatbot' | 'voicebot';
 }
 
 type StreamEvent =
@@ -145,6 +146,36 @@ function executeTool(name: string, args: Record<string, unknown>, customer: Cust
   }
 }
 
+// ─── Conversation logging ───────────────────────────────────────────────────
+
+function logConversation(
+  demo: 'chatbot' | 'voicebot',
+  conversationId: string,
+  userMessage: string,
+  assistantText: string,
+  toolsUsed: string[],
+  hasCustomer: boolean,
+): void {
+  if (!process.env.DATABASE_URL) return;
+  void (async () => {
+    try {
+      const { db } = await import('@/lib/db');
+      const { conversations } = await import('@/lib/db/schema');
+      await db.insert(conversations).values({
+        demoType: demo,
+        sessionId: conversationId,
+        messages: [
+          { role: 'user', content: userMessage },
+          { role: 'assistant', content: assistantText },
+        ],
+        metadata: { event: 'message_sent', toolsUsed, hasCustomer },
+      });
+    } catch (err) {
+      console.error('[chat] log error:', err);
+    }
+  })();
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -172,7 +203,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'Body inválido' }, { status: 400 });
   }
 
-  const { message, history = [], conversationId } = body;
+  const { message, history = [], conversationId, demo = 'chatbot' } = body;
   if (!message?.trim()) {
     return Response.json({ error: 'Mensaje requerido' }, { status: 400 });
   }
@@ -258,6 +289,7 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
     // No tool calls — model answered directly
     if (rawToolCalls.length === 0) {
       if (assistantMsg?.content) emit({ type: 'text', text: assistantMsg.content });
+      logConversation(demo, newConversationId, message.trim(), assistantMsg?.content ?? '', [], !!customer);
       return;
     }
 
@@ -297,6 +329,7 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
     const reader = step2Res.body!.getReader();
     const dec = new TextDecoder();
     let buf = '';
+    let assistantText = '';
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -310,10 +343,22 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
         try {
           const chunk = JSON.parse(raw) as { choices?: Array<{ delta?: { content?: string } }> };
           const text = chunk.choices?.[0]?.delta?.content;
-          if (text) emit({ type: 'text', text });
+          if (text) {
+            emit({ type: 'text', text });
+            assistantText += text;
+          }
         } catch { /* ignore malformed chunks */ }
       }
     }
+
+    logConversation(
+      demo,
+      newConversationId,
+      message.trim(),
+      assistantText,
+      rawToolCalls.map((tc) => tc.function.name),
+      !!customer,
+    );
   }, newConversationId);
 }
 

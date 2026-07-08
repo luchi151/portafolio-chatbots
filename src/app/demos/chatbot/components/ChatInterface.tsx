@@ -96,7 +96,7 @@ export function ChatInterface() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ message: augmentedMessage, history, conversationId }),
+        body: JSON.stringify({ message: augmentedMessage, history, conversationId, demo: 'chatbot' }),
         signal: ctrl.signal,
       });
 
@@ -190,13 +190,6 @@ export function ChatInterface() {
       }
 
       setFiles([]);
-
-      // Fire analytics (non-blocking)
-      fetch('/api/analytics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: 'message_sent', demo: 'chatbot', sessionId: conversationId }),
-      }).catch(() => {});
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Error al procesar la respuesta.';

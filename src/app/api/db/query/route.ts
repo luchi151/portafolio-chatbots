@@ -93,6 +93,8 @@ export async function POST(req: NextRequest) {
 
   const executionTime = Date.now() - startTime;
 
+  logConversation(llmResult.sql, results.length, executionTime, usedRealDB, llmResult.visualization.type);
+
   return Response.json({
     sql: llmResult.sql,
     results,
@@ -107,6 +109,31 @@ export async function POST(req: NextRequest) {
     },
     metadata: { executionTime: usedRealDB ? executionTime : 0, rowCount: results.length },
   });
+}
+
+// ─── Conversation logging ───────────────────────────────────────────────────
+
+function logConversation(
+  sql: string,
+  rowCount: number,
+  executionTime: number,
+  usedRealDB: boolean,
+  visualizationType: string,
+): void {
+  if (!process.env.DATABASE_URL) return;
+  void (async () => {
+    try {
+      const { db } = await import('@/lib/db');
+      const { conversations } = await import('@/lib/db/schema');
+      await db.insert(conversations).values({
+        demoType: 'db_query',
+        messages: [],
+        metadata: { event: 'query_executed', sql, rowCount, executionTime, usedRealDB, visualizationType },
+      });
+    } catch (err) {
+      console.error('[db/query] log error:', err);
+    }
+  })();
 }
 
 async function callLLM(question: string): Promise<LLMQueryResponse | null> {
