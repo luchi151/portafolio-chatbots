@@ -1,4 +1,4 @@
-import { type NextRequest } from 'next/server';
+import { after, type NextRequest } from 'next/server';
 import { validateSQL } from '@/lib/sql-validator';
 
 export const runtime = 'nodejs';
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
 
   const executionTime = Date.now() - startTime;
 
-  logConversation(llmResult.sql, results.length, executionTime, usedRealDB, llmResult.visualization.type);
+  after(() => logConversation(llmResult.sql, results.length, executionTime, usedRealDB, llmResult.visualization.type));
 
   return Response.json({
     sql: llmResult.sql,
@@ -113,27 +113,25 @@ export async function POST(req: NextRequest) {
 
 // ─── Conversation logging ───────────────────────────────────────────────────
 
-function logConversation(
+async function logConversation(
   sql: string,
   rowCount: number,
   executionTime: number,
   usedRealDB: boolean,
   visualizationType: string,
-): void {
+): Promise<void> {
   if (!process.env.DATABASE_URL) return;
-  void (async () => {
-    try {
-      const { db } = await import('@/lib/db');
-      const { conversations } = await import('@/lib/db/schema');
-      await db.insert(conversations).values({
-        demoType: 'db_query',
-        messages: [],
-        metadata: { event: 'query_executed', sql, rowCount, executionTime, usedRealDB, visualizationType },
-      });
-    } catch (err) {
-      console.error('[db/query] log error:', err);
-    }
-  })();
+  try {
+    const { db } = await import('@/lib/db');
+    const { conversations } = await import('@/lib/db/schema');
+    await db.insert(conversations).values({
+      demoType: 'db_query',
+      messages: [],
+      metadata: { event: 'query_executed', sql, rowCount, executionTime, usedRealDB, visualizationType },
+    });
+  } catch (err) {
+    console.error('[db/query] log error:', err);
+  }
 }
 
 async function callLLM(question: string): Promise<LLMQueryResponse | null> {

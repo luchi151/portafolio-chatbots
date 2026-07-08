@@ -1,4 +1,4 @@
-import { type NextRequest } from 'next/server';
+import { after, type NextRequest } from 'next/server';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -148,64 +148,62 @@ function executeTool(name: string, args: Record<string, unknown>, customer: Cust
 
 // ─── Conversation logging ───────────────────────────────────────────────────
 
-function logConversation(
+async function logConversation(
   demo: 'chatbot' | 'voicebot',
   conversationId: string,
   userMessage: string,
   assistantText: string,
   toolsUsed: string[],
   hasCustomer: boolean,
-): void {
+): Promise<void> {
   if (!process.env.DATABASE_URL) return;
-  void (async () => {
-    try {
-      const { db } = await import('@/lib/db');
-      const { conversations } = await import('@/lib/db/schema');
-      const { and, eq } = await import('drizzle-orm');
+  try {
+    const { db } = await import('@/lib/db');
+    const { conversations } = await import('@/lib/db/schema');
+    const { and, eq } = await import('drizzle-orm');
 
-      const newTurn = [
-        { role: 'user', content: userMessage },
-        { role: 'assistant', content: assistantText },
-      ];
+    const newTurn = [
+      { role: 'user', content: userMessage },
+      { role: 'assistant', content: assistantText },
+    ];
 
-      // All turns of one session share `conversationId` — accumulate them onto a
-      // single row instead of one row per turn, so the dashboard/table reflects
-      // full conversations rather than disconnected message pairs.
-      const existing = await db
-        .select({ id: conversations.id, messages: conversations.messages, metadata: conversations.metadata })
-        .from(conversations)
-        .where(and(eq(conversations.demoType, demo), eq(conversations.sessionId, conversationId)))
-        .limit(1);
+    // All turns of one session share `conversationId` — accumulate them onto a
+    // single row instead of one row per turn, so the dashboard/table reflects
+    // full conversations rather than disconnected message pairs.
+    const existing = await db
+      .select({ id: conversations.id, messages: conversations.messages, metadata: conversations.metadata })
+      .from(conversations)
+      .where(and(eq(conversations.demoType, demo), eq(conversations.sessionId, conversationId)))
+      .limit(1);
 
-      if (existing.length > 0) {
-        const row = existing[0];
-        const prevMessages = Array.isArray(row.messages) ? row.messages : [];
-        const prevMeta = (row.metadata as { toolsUsed?: string[]; hasCustomer?: boolean } | null) ?? {};
+    if (existing.length > 0) {
+      const row = existing[0];
+      const prevMessages = Array.isArray(row.messages) ? row.messages : [];
+      const prevMeta = (row.metadata as { toolsUsed?: string[]; hasCustomer?: boolean } | null) ?? {};
 
-        await db
-          .update(conversations)
-          .set({
-            messages: [...prevMessages, ...newTurn],
-            metadata: {
-              event: 'message_sent',
-              toolsUsed: [...(prevMeta.toolsUsed ?? []), ...toolsUsed],
-              hasCustomer: prevMeta.hasCustomer || hasCustomer,
-            },
-            updatedAt: new Date(),
-          })
-          .where(eq(conversations.id, row.id));
-      } else {
-        await db.insert(conversations).values({
-          demoType: demo,
-          sessionId: conversationId,
-          messages: newTurn,
-          metadata: { event: 'message_sent', toolsUsed, hasCustomer },
-        });
-      }
-    } catch (err) {
-      console.error('[chat] log error:', err);
+      await db
+        .update(conversations)
+        .set({
+          messages: [...prevMessages, ...newTurn],
+          metadata: {
+            event: 'message_sent',
+            toolsUsed: [...(prevMeta.toolsUsed ?? []), ...toolsUsed],
+            hasCustomer: prevMeta.hasCustomer || hasCustomer,
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(conversations.id, row.id));
+    } else {
+      await db.insert(conversations).values({
+        demoType: demo,
+        sessionId: conversationId,
+        messages: newTurn,
+        metadata: { event: 'message_sent', toolsUsed, hasCustomer },
+      });
     }
-  })();
+  } catch (err) {
+    console.error('[chat] log error:', err);
+  }
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
@@ -321,7 +319,7 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
     // No tool calls — model answered directly
     if (rawToolCalls.length === 0) {
       if (assistantMsg?.content) emit({ type: 'text', text: assistantMsg.content });
-      logConversation(demo, newConversationId, message.trim(), assistantMsg?.content ?? '', [], !!customer);
+      after(() => logConversation(demo, newConversationId, message.trim(), assistantMsg?.content ?? '', [], !!customer));
       return;
     }
 
@@ -383,13 +381,15 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
       }
     }
 
-    logConversation(
-      demo,
-      newConversationId,
-      message.trim(),
-      assistantText,
-      rawToolCalls.map((tc) => tc.function.name),
-      !!customer,
+    after(() =>
+      logConversation(
+        demo,
+        newConversationId,
+        message.trim(),
+        assistantText,
+        rawToolCalls.map((tc) => tc.function.name),
+        !!customer,
+      ),
     );
   }, newConversationId);
 }
