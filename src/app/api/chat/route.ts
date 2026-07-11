@@ -120,12 +120,49 @@ interface RequestBody {
   demo?: 'chatbot' | 'voicebot';
 }
 
+type Sentiment = 'positive' | 'neutral' | 'negative' | 'frustrated';
+const SENTIMENTS: Sentiment[] = ['positive', 'neutral', 'negative', 'frustrated'];
+
 type StreamEvent =
   | { type: 'status'; text: string }
   | { type: 'tool_start'; name: string }
   | { type: 'tool_call'; name: string; arguments: Record<string, unknown>; result: unknown }
   | { type: 'text'; text: string }
+  | { type: 'sentiment'; value: Sentiment }
   | { type: 'done'; conversationId: string };
+
+// ─── Sentiment classification ──────────────────────────────────────────────────
+
+async function classifySentiment(
+  message: string,
+  provider: { url: string; model: string; key: string },
+): Promise<Sentiment> {
+  try {
+    const res = await fetch(provider.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` },
+      body: JSON.stringify({
+        model: provider.model,
+        temperature: 0,
+        max_tokens: 5,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Clasifica el sentimiento del mensaje de un cliente de cobranza. Responde con UNA sola palabra en inglés: positive, neutral, negative o frustrated.',
+          },
+          { role: 'user', content: message },
+        ],
+      }),
+    });
+    if (!res.ok) return 'neutral';
+    const data = (await res.json()) as OAIResponse;
+    const raw = (data.choices?.[0]?.message?.content ?? '').trim().toLowerCase();
+    return SENTIMENTS.find((s) => raw.includes(s)) ?? 'neutral';
+  } catch {
+    return 'neutral';
+  }
+}
 
 // ─── Tool executor ────────────────────────────────────────────────────────────
 
@@ -187,6 +224,7 @@ async function logConversation(
   hasCustomer: boolean,
   escalated: boolean,
   escalationReason: string | null,
+  sentiment: Sentiment,
 ): Promise<void> {
   if (!process.env.DATABASE_URL) return;
   try {
@@ -217,6 +255,7 @@ async function logConversation(
           hasCustomer?: boolean;
           escalated?: boolean;
           escalationReason?: string | null;
+          sentiments?: Sentiment[];
         } | null) ?? {};
 
       await db
@@ -231,6 +270,7 @@ async function logConversation(
             // keeping the original reason unless a later turn escalates again.
             escalated: prevMeta.escalated || escalated,
             escalationReason: escalated ? escalationReason : (prevMeta.escalationReason ?? null),
+            sentiments: [...(prevMeta.sentiments ?? []), sentiment],
           },
           updatedAt: new Date(),
         })
@@ -240,7 +280,7 @@ async function logConversation(
         demoType: demo,
         sessionId: conversationId,
         messages: newTurn,
-        metadata: { event: 'message_sent', toolsUsed, hasCustomer, escalated, escalationReason },
+        metadata: { event: 'message_sent', toolsUsed, hasCustomer, escalated, escalationReason, sentiments: [sentiment] },
       });
     }
   } catch (err) {
@@ -335,14 +375,19 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.key}` };
     const base = { model: provider.model, temperature: 0.4, max_tokens: 512 };
 
-    // Step 1: non-streaming call with tools — model decides what to invoke
+    // Step 1: non-streaming call with tools — model decides what to invoke.
+    // Sentiment classification runs in parallel so it adds no perceived latency.
     emit({ type: 'status', text: 'Analizando consulta...' });
 
-    const step1Res = await fetch(provider.url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ ...base, messages, tools: TOOLS, tool_choice: 'auto' }),
-    });
+    const [step1Res, sentiment] = await Promise.all([
+      fetch(provider.url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ...base, messages, tools: TOOLS, tool_choice: 'auto' }),
+      }),
+      classifySentiment(message.trim(), provider),
+    ]);
+    emit({ type: 'sentiment', value: sentiment });
 
     if (!step1Res.ok) {
       emit({ type: 'text', text: 'No se pudo conectar con el agente.' });
@@ -357,7 +402,7 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
     if (rawToolCalls.length === 0) {
       if (assistantMsg?.content) emit({ type: 'text', text: assistantMsg.content });
       after(() =>
-        logConversation(demo, newConversationId, message.trim(), assistantMsg?.content ?? '', [], !!customer, false, null),
+        logConversation(demo, newConversationId, message.trim(), assistantMsg?.content ?? '', [], !!customer, false, null, sentiment),
       );
       return;
     }
@@ -438,6 +483,7 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
           !!customer,
           escalated,
           escalationReason,
+          sentiment,
         ),
         escalated
           ? notifyEscalation(demo, newConversationId, escalationReason ?? 'No especificado', customer?.name ?? null)

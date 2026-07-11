@@ -7,23 +7,26 @@ import {
   getDailyActivity,
   getDemoCounts,
   getEscalationStats,
+  getSentimentStats,
   getToolUsage,
 } from '@/lib/db/analytics-queries';
 import { StatsCards } from './components/StatsCards';
 import { ActivityChart } from './components/ActivityChart';
 import { ToolUsageChart } from './components/ToolUsageChart';
+import { SentimentChart } from './components/SentimentChart';
 
 // Must reflect live activity, not a build-time snapshot.
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
-  const [demoCounts, dailyActivity, toolUsage, dbStats, escalationStats, csatStats] = await Promise.all([
+  const [demoCounts, dailyActivity, toolUsage, dbStats, escalationStats, csatStats, sentimentStats] = await Promise.all([
     getDemoCounts(),
     getDailyActivity(),
     getToolUsage(),
     getDbQueryStats(),
     getEscalationStats(),
     getCsatStats(),
+    getSentimentStats(),
   ]);
 
   return (
@@ -60,6 +63,15 @@ export default async function AnalyticsPage() {
               </CardHeader>
               <CardContent>
                 <ToolUsageChart data={toolUsage} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-semibold">Sentimiento del cliente</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SentimentChart data={sentimentStats} />
               </CardContent>
             </Card>
           </div>

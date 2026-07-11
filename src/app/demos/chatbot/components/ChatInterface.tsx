@@ -5,7 +5,7 @@ import { useAuth } from '@/components/shared/DemoShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MessageList } from './MessageList';
-import type { Message, ToolCall } from '@/types';
+import type { Message, Sentiment, ToolCall } from '@/types';
 import { Loader2, Paperclip, Send, Trash2, X } from 'lucide-react';
 
 type StreamEvent =
@@ -13,6 +13,7 @@ type StreamEvent =
   | { type: 'tool_start'; name: string }
   | { type: 'tool_call'; name: string; arguments: Record<string, unknown>; result: unknown }
   | { type: 'text'; text: string }
+  | { type: 'sentiment'; value: Sentiment }
   | { type: 'done'; conversationId: string };
 
 async function parseFile(file: File, token: string): Promise<string | null> {
@@ -180,6 +181,15 @@ export function ChatInterface() {
               const last = next[next.length - 1];
               if (last?.role === 'assistant') {
                 next[next.length - 1] = { ...last, content: last.content + event.text, agentStep: undefined };
+              }
+              return next;
+            });
+          } else if (event.type === 'sentiment') {
+            setMessages((prev) => {
+              const next = [...prev];
+              const userIdx = next.length - 2; // last is the assistant placeholder
+              if (next[userIdx]?.role === 'user') {
+                next[userIdx] = { ...next[userIdx], sentiment: event.value };
               }
               return next;
             });

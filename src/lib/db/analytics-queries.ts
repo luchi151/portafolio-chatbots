@@ -44,6 +44,15 @@ export interface CsatStats {
   satisfactionRate: number; // % of thumbsUp over totalRated
 }
 
+export interface SentimentStats {
+  positive: number;
+  neutral: number;
+  negative: number;
+  frustrated: number;
+  total: number;
+  negativeRate: number; // % of negative+frustrated over total
+}
+
 // Row volume for a portfolio demo is small — fetch the relevant columns once
 // and aggregate in JS rather than reaching for raw SQL (date_trunc,
 // jsonb_array_elements_text) for a handful of dashboard numbers.
@@ -191,5 +200,43 @@ export async function getCsatStats(): Promise<CsatStats> {
   } catch (err) {
     console.error('[analytics] getCsatStats error:', err);
     return { totalRated: 0, thumbsUp: 0, satisfactionRate: 0 };
+  }
+}
+
+export async function getSentimentStats(): Promise<SentimentStats> {
+  try {
+    const db = await getDb();
+    const rows = await db
+      .select({ demoType: conversations.demoType, metadata: conversations.metadata })
+      .from(conversations);
+
+    let positive = 0;
+    let neutral = 0;
+    let negative = 0;
+    let frustrated = 0;
+    for (const r of rows) {
+      if (r.demoType !== 'chatbot' && r.demoType !== 'voicebot') continue;
+      const sentiments = (r.metadata as { sentiments?: unknown })?.sentiments;
+      if (!Array.isArray(sentiments)) continue;
+      for (const s of sentiments) {
+        if (s === 'positive') positive += 1;
+        else if (s === 'neutral') neutral += 1;
+        else if (s === 'negative') negative += 1;
+        else if (s === 'frustrated') frustrated += 1;
+      }
+    }
+
+    const total = positive + neutral + negative + frustrated;
+    return {
+      positive,
+      neutral,
+      negative,
+      frustrated,
+      total,
+      negativeRate: total > 0 ? Math.round(((negative + frustrated) / total) * 100) : 0,
+    };
+  } catch (err) {
+    console.error('[analytics] getSentimentStats error:', err);
+    return { positive: 0, neutral: 0, negative: 0, frustrated: 0, total: 0, negativeRate: 0 };
   }
 }

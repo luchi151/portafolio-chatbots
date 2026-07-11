@@ -9,12 +9,15 @@ export interface ToolCall {
   status?: 'running' | 'done';
 }
 
+export type Sentiment = 'positive' | 'neutral' | 'negative' | 'frustrated';
+
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
   toolCalls?: ToolCall[];
   agentStep?: string;
+  sentiment?: Sentiment;
 }
 
 export interface ChatResponse {

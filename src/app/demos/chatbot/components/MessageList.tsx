@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type { Message } from '@/types';
+import type { Message, Sentiment } from '@/types';
 import { ToolCallDisplay } from './ToolCallDisplay';
 import { CsatPrompt } from '@/components/shared/CsatPrompt';
 import { Bot, Loader2, User } from 'lucide-react';
@@ -12,6 +12,13 @@ interface Props {
   conversationId?: string;
   token: string | null;
 }
+
+const SENTIMENT_META: Record<Sentiment, { emoji: string; color: string; label: string }> = {
+  positive: { emoji: '🙂', color: '#10b981', label: 'Positivo' },
+  neutral: { emoji: '😐', color: '#6b7280', label: 'Neutral' },
+  negative: { emoji: '😟', color: '#f59e0b', label: 'Negativo' },
+  frustrated: { emoji: '😠', color: '#ef4444', label: 'Frustrado' },
+};
 
 const SUGGESTIONS = [
   '¿Cuál es mi saldo actual?',
@@ -74,6 +81,15 @@ export function MessageList({ messages, isStreaming, conversationId, token }: Pr
 
             {/* Bubble */}
             <div className={`flex max-w-[78%] flex-col gap-1 ${isUser ? 'items-end' : ''}`}>
+              {isUser && msg.sentiment && (
+                <span
+                  className="flex items-center gap-1 text-[10px] font-medium"
+                  style={{ color: SENTIMENT_META[msg.sentiment].color }}
+                  title={SENTIMENT_META[msg.sentiment].label}
+                >
+                  {SENTIMENT_META[msg.sentiment].emoji} {SENTIMENT_META[msg.sentiment].label}
+                </span>
+              )}
               {msg.toolCalls && msg.toolCalls.length > 0 && (
                 <div className="w-full">
                   {msg.toolCalls.map((tc, j) => (
