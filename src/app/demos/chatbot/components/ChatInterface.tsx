@@ -244,7 +244,12 @@ export function ChatInterface() {
       </div>
 
       {/* Messages */}
-      <MessageList messages={messages} isStreaming={isStreaming} />
+      <MessageList
+        messages={messages}
+        isStreaming={isStreaming}
+        conversationId={conversationId}
+        token={token}
+      />
 
       {/* File chips */}
       {files.length > 0 && (

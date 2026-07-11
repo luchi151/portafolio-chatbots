@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/components/shared/DemoShell';
+import { CsatPrompt } from '@/components/shared/CsatPrompt';
 import { TranscriptDisplay } from './TranscriptDisplay';
 import { VoiceControls } from './VoiceControls';
 
@@ -59,6 +60,7 @@ export function VoicebotInterface() {
   const [interim, setInterim] = useState('');
   const [isSupported, setIsSupported] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
 
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -140,7 +142,10 @@ export function VoicebotInterface() {
           try {
             const evt = JSON.parse(raw) as { type: string; text?: string; conversationId?: string };
             if (evt.type === 'text' && evt.text) fullText += evt.text;
-            if (evt.type === 'done' && evt.conversationId) conversationIdRef.current = evt.conversationId;
+            if (evt.type === 'done' && evt.conversationId) {
+              conversationIdRef.current = evt.conversationId;
+              setConversationId(evt.conversationId);
+            }
           } catch { /* ignore malformed chunks */ }
         }
       }
@@ -226,6 +231,7 @@ export function VoicebotInterface() {
     finalTranscriptRef.current = '';
     shouldProcessRef.current = false;
     conversationIdRef.current = undefined;
+    setConversationId(undefined);
     setConversation([]);
     setStatus('idle');
     setInterim('');
@@ -240,6 +246,9 @@ export function VoicebotInterface() {
         status={status}
         onReset={handleReset}
       />
+      {status === 'idle' && conversationId && (
+        <CsatPrompt key={conversationId} conversationId={conversationId} demo="voicebot" token={token} />
+      )}
       <VoiceControls
         status={status}
         isSupported={isSupported}

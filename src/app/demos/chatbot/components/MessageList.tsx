@@ -3,11 +3,14 @@
 import { useEffect, useRef } from 'react';
 import type { Message } from '@/types';
 import { ToolCallDisplay } from './ToolCallDisplay';
+import { CsatPrompt } from '@/components/shared/CsatPrompt';
 import { Bot, Loader2, User } from 'lucide-react';
 
 interface Props {
   messages: Message[];
   isStreaming: boolean;
+  conversationId?: string;
+  token: string | null;
 }
 
 const SUGGESTIONS = [
@@ -17,7 +20,7 @@ const SUGGESTIONS = [
   '¿Qué opciones de pago tengo?',
 ];
 
-export function MessageList({ messages, isStreaming }: Props) {
+export function MessageList({ messages, isStreaming, conversationId, token }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -118,6 +121,9 @@ export function MessageList({ messages, isStreaming }: Props) {
           </div>
         );
       })}
+      {!isStreaming && conversationId && (
+        <CsatPrompt key={conversationId} conversationId={conversationId} demo="chatbot" token={token} />
+      )}
       <div ref={bottomRef} />
     </div>
   );

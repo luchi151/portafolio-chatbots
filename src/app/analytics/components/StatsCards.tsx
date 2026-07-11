@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { DbQueryStats, DemoCount, EscalationStats, ToolUsageCount } from '@/lib/db/analytics-queries';
+import type { CsatStats, DbQueryStats, DemoCount, EscalationStats, ToolUsageCount } from '@/lib/db/analytics-queries';
 
 const DEMO_LABELS: Record<string, { label: string; color: string }> = {
   chatbot: { label: 'Chatbot de cobranza', color: '#3b82f6' },
@@ -12,14 +12,15 @@ interface Props {
   toolUsage: ToolUsageCount[];
   dbStats: DbQueryStats;
   escalationStats: EscalationStats;
+  csatStats: CsatStats;
 }
 
-export function StatsCards({ demoCounts, toolUsage, dbStats, escalationStats }: Props) {
+export function StatsCards({ demoCounts, toolUsage, dbStats, escalationStats, csatStats }: Props) {
   const total = demoCounts.reduce((sum, d) => sum + d.count, 0);
   const totalToolCalls = toolUsage.reduce((sum, t) => sum + t.count, 0);
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">Total interacciones</CardTitle>
@@ -75,6 +76,16 @@ export function StatsCards({ demoCounts, toolUsage, dbStats, escalationStats }: 
         <CardContent>
           <p className="text-3xl font-bold">{escalationStats.totalEscalated}</p>
           <p className="text-xs text-muted-foreground">{escalationStats.escalationRate}% de las conversaciones</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Satisfacción (CSAT)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-3xl font-bold">{csatStats.satisfactionRate}%</p>
+          <p className="text-xs text-muted-foreground">{csatStats.totalRated} valoraciones</p>
         </CardContent>
       </Card>
     </div>

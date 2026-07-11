@@ -38,6 +38,12 @@ export interface EscalationStats {
   escalationRate: number; // % of chatbot + voicebot conversations
 }
 
+export interface CsatStats {
+  totalRated: number;
+  thumbsUp: number;
+  satisfactionRate: number; // % of thumbsUp over totalRated
+}
+
 // Row volume for a portfolio demo is small — fetch the relevant columns once
 // and aggregate in JS rather than reaching for raw SQL (date_trunc,
 // jsonb_array_elements_text) for a handful of dashboard numbers.
@@ -157,5 +163,33 @@ export async function getEscalationStats(): Promise<EscalationStats> {
   } catch (err) {
     console.error('[analytics] getEscalationStats error:', err);
     return { totalEscalated: 0, escalationRate: 0 };
+  }
+}
+
+export async function getCsatStats(): Promise<CsatStats> {
+  try {
+    const db = await getDb();
+    const rows = await db
+      .select({ demoType: conversations.demoType, metadata: conversations.metadata })
+      .from(conversations);
+
+    let totalRated = 0;
+    let thumbsUp = 0;
+    for (const r of rows) {
+      if (r.demoType !== 'chatbot' && r.demoType !== 'voicebot') continue;
+      const rating = (r.metadata as { csat?: { rating?: unknown } })?.csat?.rating;
+      if (rating !== 'up' && rating !== 'down') continue;
+      totalRated += 1;
+      if (rating === 'up') thumbsUp += 1;
+    }
+
+    return {
+      totalRated,
+      thumbsUp,
+      satisfactionRate: totalRated > 0 ? Math.round((thumbsUp / totalRated) * 100) : 0,
+    };
+  } catch (err) {
+    console.error('[analytics] getCsatStats error:', err);
+    return { totalRated: 0, thumbsUp: 0, satisfactionRate: 0 };
   }
 }

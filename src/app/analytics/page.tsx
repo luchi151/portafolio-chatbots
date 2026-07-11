@@ -2,6 +2,7 @@ import { Navbar } from '@/components/marketing/Navbar';
 import { Footer } from '@/components/marketing/Footer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
+  getCsatStats,
   getDbQueryStats,
   getDailyActivity,
   getDemoCounts,
@@ -16,12 +17,13 @@ import { ToolUsageChart } from './components/ToolUsageChart';
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
-  const [demoCounts, dailyActivity, toolUsage, dbStats, escalationStats] = await Promise.all([
+  const [demoCounts, dailyActivity, toolUsage, dbStats, escalationStats, csatStats] = await Promise.all([
     getDemoCounts(),
     getDailyActivity(),
     getToolUsage(),
     getDbQueryStats(),
     getEscalationStats(),
+    getCsatStats(),
   ]);
 
   return (
@@ -40,6 +42,7 @@ export default async function AnalyticsPage() {
               toolUsage={toolUsage}
               dbStats={dbStats}
               escalationStats={escalationStats}
+              csatStats={csatStats}
             />
 
             <Card>

@@ -1,5 +1,6 @@
 import { after, type NextRequest } from 'next/server';
 import { extractBearerToken, verifyDemoToken } from '@/lib/jwt';
+import { notifyEscalation } from '@/lib/notifications/escalation';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -427,16 +428,21 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
     }
 
     after(() =>
-      logConversation(
-        demo,
-        newConversationId,
-        message.trim(),
-        assistantText,
-        rawToolCalls.map((tc) => tc.function.name),
-        !!customer,
-        escalated,
-        escalationReason,
-      ),
+      Promise.allSettled([
+        logConversation(
+          demo,
+          newConversationId,
+          message.trim(),
+          assistantText,
+          rawToolCalls.map((tc) => tc.function.name),
+          !!customer,
+          escalated,
+          escalationReason,
+        ),
+        escalated
+          ? notifyEscalation(demo, newConversationId, escalationReason ?? 'No especificado', customer?.name ?? null)
+          : Promise.resolve(),
+      ]),
     );
   }, newConversationId);
 }
