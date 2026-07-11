@@ -1,4 +1,5 @@
 import { type NextRequest } from 'next/server';
+import { extractBearerToken, verifyDemoToken } from '@/lib/jwt';
 
 export const runtime = 'nodejs';
 export const maxDuration = 15;
@@ -6,17 +7,13 @@ export const maxDuration = 15;
 const DEFAULT_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Sarah — multilingual
 
 export async function POST(req: NextRequest) {
-  const auth = req.headers.get('authorization');
-  if (!auth?.startsWith('Bearer ')) {
+  const token = extractBearerToken(req.headers.get('authorization'));
+  if (!token) {
     return Response.json({ error: 'No autorizado' }, { status: 401 });
   }
 
   try {
-    const { jwtVerify } = await import('jose');
-    const secret = new TextEncoder().encode(
-      process.env.JWT_SECRET ?? 'dev-secret-change-in-prod',
-    );
-    await jwtVerify(auth.slice(7), secret);
+    await verifyDemoToken(token);
   } catch {
     return Response.json({ error: 'Token inválido' }, { status: 401 });
   }

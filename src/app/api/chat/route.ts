@@ -1,4 +1,5 @@
 import { after, type NextRequest } from 'next/server';
+import { extractBearerToken, verifyDemoToken } from '@/lib/jwt';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -249,19 +250,14 @@ async function logConversation(
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const auth = req.headers.get('authorization');
-  if (!auth?.startsWith('Bearer ')) {
+  const token = extractBearerToken(req.headers.get('authorization'));
+  if (!token) {
     return Response.json({ error: 'No autorizado' }, { status: 401 });
   }
 
   let customerId = '';
   try {
-    const { jwtVerify } = await import('jose');
-    const secret = new TextEncoder().encode(
-      process.env.JWT_SECRET ?? 'dev-secret-change-in-prod',
-    );
-    const { payload } = await jwtVerify(auth.slice(7), secret);
-    customerId = (payload.customerId as string | undefined) ?? '';
+    ({ customerId } = await verifyDemoToken(token));
   } catch {
     return Response.json({ error: 'Token inválido o expirado' }, { status: 401 });
   }

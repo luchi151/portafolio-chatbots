@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, RATE_LIMIT } from '@/lib/rate-limiter';
+import { extractBearerToken, verifyDemoToken } from '@/lib/jwt';
 
 const PROTECTED = ['/api/chat', '/api/voice/', '/api/db/query'];
 
@@ -34,17 +35,13 @@ export async function proxy(req: NextRequest) {
   }
 
   // JWT verification
-  const auth = req.headers.get('authorization');
-  if (!auth?.startsWith('Bearer ')) {
+  const token = extractBearerToken(req.headers.get('authorization'));
+  if (!token) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401, headers: rlHeaders });
   }
 
   try {
-    const { jwtVerify } = await import('jose');
-    const secret = new TextEncoder().encode(
-      process.env.JWT_SECRET ?? 'dev-secret-change-in-prod',
-    );
-    await jwtVerify(auth.slice(7), secret);
+    await verifyDemoToken(token);
   } catch {
     return NextResponse.json(
       { error: 'Token inválido o expirado' },

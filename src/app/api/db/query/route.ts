@@ -1,5 +1,6 @@
 import { after, type NextRequest } from 'next/server';
 import { validateSQL } from '@/lib/sql-validator';
+import { extractBearerToken, verifyDemoToken } from '@/lib/jwt';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -48,15 +49,13 @@ Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional):
 Reglas: Solo SELECT. PostgreSQL. sampleData debe coincidir con columnas del SELECT. Montos realistas en COP (500000-50000000). Nombres colombianos.`;
 
 export async function POST(req: NextRequest) {
-  const auth = req.headers.get('authorization');
-  if (!auth?.startsWith('Bearer ')) {
+  const token = extractBearerToken(req.headers.get('authorization'));
+  if (!token) {
     return Response.json({ error: 'No autorizado' }, { status: 401 });
   }
 
   try {
-    const { jwtVerify } = await import('jose');
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET ?? 'dev-secret-change-in-prod');
-    await jwtVerify(auth.slice(7), secret);
+    await verifyDemoToken(token);
   } catch {
     return Response.json({ error: 'Token inválido' }, { status: 401 });
   }

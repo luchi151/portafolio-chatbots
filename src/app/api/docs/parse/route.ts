@@ -1,4 +1,5 @@
 import { type NextRequest } from 'next/server';
+import { extractBearerToken, verifyDemoToken } from '@/lib/jwt';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -8,11 +9,10 @@ const ALLOWED_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg']);
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
 async function verifyJWT(auth: string | null): Promise<boolean> {
-  if (!auth?.startsWith('Bearer ')) return false;
+  const token = extractBearerToken(auth);
+  if (!token) return false;
   try {
-    const { jwtVerify } = await import('jose');
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET ?? 'dev-secret-change-in-prod');
-    await jwtVerify(auth.slice(7), secret);
+    await verifyDemoToken(token);
     return true;
   } catch {
     return false;

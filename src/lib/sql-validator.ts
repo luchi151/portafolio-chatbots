@@ -16,6 +16,12 @@ export function validateSQL(sql: string): { valid: boolean; error?: string } {
     return { valid: false, error: 'Solo se permiten consultas SELECT' };
   }
 
+  // Reject stacked statements (e.g. "SELECT 1; SELECT pg_sleep(10)") —
+  // a single optional trailing semicolon is fine, anything after it is not.
+  if (trimmed.replace(/;+\s*$/, '').includes(';')) {
+    return { valid: false, error: 'Múltiples sentencias no permitidas' };
+  }
+
   for (const kw of BLOCKED) {
     if (new RegExp(`\\b${kw}\\b`, 'i').test(sql)) {
       return { valid: false, error: `Operación no permitida: ${kw}` };

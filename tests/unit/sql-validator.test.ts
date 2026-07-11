@@ -41,6 +41,14 @@ describe('validateSQL — valid queries', () => {
       validateSQL("SELECT name, CASE WHEN debt_amount > 1000000 THEN 'alto' ELSE 'bajo' END FROM customers").valid,
     ).toBe(true);
   });
+
+  it('allows a single trailing semicolon', () => {
+    expect(validateSQL('SELECT * FROM customers;').valid).toBe(true);
+  });
+
+  it('allows a trailing semicolon with surrounding whitespace', () => {
+    expect(validateSQL('SELECT * FROM customers ;  \n').valid).toBe(true);
+  });
 });
 
 describe('validateSQL — blocked keywords', () => {
@@ -63,6 +71,18 @@ describe('validateSQL — blocked keywords', () => {
       expect(result.valid).toBe(false);
       expect(result.error).toBeDefined();
     });
+  });
+
+  it('blocks lowercase keyword variants', () => {
+    expect(validateSQL('drop table customers').valid).toBe(false);
+  });
+
+  it('blocks mixed-case keyword variants', () => {
+    expect(validateSQL('DeLeTe FROM customers').valid).toBe(false);
+  });
+
+  it('does not false-positive on identifiers containing a blocked keyword as substring', () => {
+    expect(validateSQL('SELECT dropped_at, called_count FROM customers').valid).toBe(true);
   });
 });
 
@@ -90,6 +110,33 @@ describe('validateSQL — injection patterns', () => {
 
   it('rejects whitespace-only string', () => {
     const result = validateSQL('   ');
+    expect(result.valid).toBe(false);
+  });
+
+  it('blocks stacked statements even when the second statement has no blocked keyword', () => {
+    // Both halves are plain SELECTs — the keyword blocklist alone would miss this.
+    const result = validateSQL('SELECT * FROM customers; SELECT pg_sleep(10)');
+    expect(result.valid).toBe(false);
+  });
+
+  it('blocks stacked statements smuggling a blocked keyword after the semicolon', () => {
+    const result = validateSQL('SELECT 1; DROP TABLE customers');
+    expect(result.valid).toBe(false);
+  });
+
+  it('blocks a semicolon-separated statement disguised via a comment-free split', () => {
+    const result = validateSQL('SELECT * FROM customers WHERE id = 1; SELECT * FROM users');
+    expect(result.valid).toBe(false);
+  });
+
+  it('blocks nested/multiple block comments used to smuggle a keyword', () => {
+    const result = validateSQL('SELECT * FROM customers /* comment */ /* DROP TABLE x */');
+    expect(result.valid).toBe(false);
+  });
+
+  it('blocks a keyword split across a block comment', () => {
+    // "DR" + comment + "OP" would evade a naive \bDROP\b check if comments were stripped first.
+    const result = validateSQL('SELECT * FROM customers; DR/**/OP TABLE customers');
     expect(result.valid).toBe(false);
   });
 });

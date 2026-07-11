@@ -1,4 +1,5 @@
 import { type NextRequest } from 'next/server';
+import { signDemoToken } from '@/lib/jwt';
 
 export const runtime = 'nodejs';
 
@@ -18,10 +19,6 @@ export async function POST(req: NextRequest) {
   if (!documentId) {
     return Response.json({ error: 'documentId es requerido' }, { status: 400 });
   }
-
-  const secret = new TextEncoder().encode(
-    process.env.JWT_SECRET ?? 'dev-secret-change-in-prod',
-  );
 
   let customerId: string;
 
@@ -53,14 +50,7 @@ export async function POST(req: NextRequest) {
   }
 
   const sessionId = crypto.randomUUID();
-
-  const { SignJWT } = await import('jose');
-  const token = await new SignJWT({ customerId, sessionId })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setSubject(customerId)
-    .setIssuedAt()
-    .setExpirationTime('24h')
-    .sign(secret);
+  const token = await signDemoToken({ customerId, sessionId });
 
   return Response.json({ token });
 }
