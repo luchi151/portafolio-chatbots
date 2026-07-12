@@ -1,16 +1,7 @@
 import { Navbar } from '@/components/marketing/Navbar';
 import { Footer } from '@/components/marketing/Footer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  getConversationSentimentStats,
-  getCsatStats,
-  getDbQueryStats,
-  getDailyActivity,
-  getDemoCounts,
-  getEscalationStats,
-  getSentimentStats,
-  getToolUsage,
-} from '@/lib/db/analytics-queries';
+import { getAnalyticsDashboardData } from '@/lib/db/analytics-queries';
 import { StatsCards } from './components/StatsCards';
 import { ActivityChart } from './components/ActivityChart';
 import { ToolUsageChart } from './components/ToolUsageChart';
@@ -22,7 +13,7 @@ import { ConversationSemaforoList } from './components/ConversationSemaforoList'
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
-  const [
+  const {
     demoCounts,
     dailyActivity,
     toolUsage,
@@ -31,16 +22,7 @@ export default async function AnalyticsPage() {
     csatStats,
     sentimentStats,
     conversationSentimentStats,
-  ] = await Promise.all([
-    getDemoCounts(),
-    getDailyActivity(),
-    getToolUsage(),
-    getDbQueryStats(),
-    getEscalationStats(),
-    getCsatStats(),
-    getSentimentStats(),
-    getConversationSentimentStats(),
-  ]);
+  } = await getAnalyticsDashboardData();
 
   return (
     <>

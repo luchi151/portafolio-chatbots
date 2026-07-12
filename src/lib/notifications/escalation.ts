@@ -1,9 +1,25 @@
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Slack mrkdwn reserves &, <, > for entity/link syntax — escape per Slack's
+// own convention (https://api.slack.com/reference/surfaces/formatting#escaping).
+function escapeSlack(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 async function notifySlack(demo: string, conversationId: string, reason: string, customerName: string | null): Promise<void> {
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;
   if (!webhookUrl) return;
 
-  const cliente = customerName ?? 'Cliente demo';
-  const text = `🚨 *Escalación a asesor humano*\nDemo: *${demo}*\nCliente: ${cliente}\nMotivo: ${reason}\nConversación: \`${conversationId}\``;
+  const cliente = escapeSlack(customerName ?? 'Cliente demo');
+  const motivo = escapeSlack(reason);
+  const text = `🚨 *Escalación a asesor humano*\nDemo: *${demo}*\nCliente: ${cliente}\nMotivo: ${motivo}\nConversación: \`${conversationId}\``;
 
   await fetch(webhookUrl, {
     method: 'POST',
@@ -19,14 +35,15 @@ async function notifyEmail(demo: string, conversationId: string, reason: string,
 
   const { Resend } = await import('resend');
   const resend = new Resend(apiKey);
-  const cliente = customerName ?? 'Cliente demo';
+  const cliente = escapeHtml(customerName ?? 'Cliente demo');
+  const motivo = escapeHtml(reason);
   const from = process.env.ESCALATION_FROM_EMAIL ?? 'onboarding@resend.dev';
 
   await resend.emails.send({
     from,
     to,
     subject: `Escalación a asesor humano — ${demo}`,
-    html: `<p><strong>Demo:</strong> ${demo}</p><p><strong>Cliente:</strong> ${cliente}</p><p><strong>Motivo:</strong> ${reason}</p><p><strong>Conversación:</strong> ${conversationId}</p>`,
+    html: `<p><strong>Demo:</strong> ${escapeHtml(demo)}</p><p><strong>Cliente:</strong> ${cliente}</p><p><strong>Motivo:</strong> ${motivo}</p><p><strong>Conversación:</strong> ${escapeHtml(conversationId)}</p>`,
   });
 }
 

@@ -230,7 +230,7 @@ async function logConversation(
   try {
     const { db } = await import('@/lib/db');
     const { conversations } = await import('@/lib/db/schema');
-    const { and, eq } = await import('drizzle-orm');
+    const { sql } = await import('drizzle-orm');
 
     const newTurn = [
       { role: 'user', content: userMessage },
@@ -239,50 +239,37 @@ async function logConversation(
 
     // All turns of one session share `conversationId` — accumulate them onto a
     // single row instead of one row per turn, so the dashboard/table reflects
-    // full conversations rather than disconnected message pairs.
-    const existing = await db
-      .select({ id: conversations.id, messages: conversations.messages, metadata: conversations.metadata })
-      .from(conversations)
-      .where(and(eq(conversations.demoType, demo), eq(conversations.sessionId, conversationId)))
-      .limit(1);
-
-    if (existing.length > 0) {
-      const row = existing[0];
-      const prevMessages = Array.isArray(row.messages) ? row.messages : [];
-      const prevMeta =
-        (row.metadata as {
-          toolsUsed?: string[];
-          hasCustomer?: boolean;
-          escalated?: boolean;
-          escalationReason?: string | null;
-          sentiments?: Sentiment[];
-        } | null) ?? {};
-
-      await db
-        .update(conversations)
-        .set({
-          messages: [...prevMessages, ...newTurn],
-          metadata: {
-            event: 'message_sent',
-            toolsUsed: [...(prevMeta.toolsUsed ?? []), ...toolsUsed],
-            hasCustomer: prevMeta.hasCustomer || hasCustomer,
-            // Escalation is sticky — once a session is escalated it stays flagged,
-            // keeping the original reason unless a later turn escalates again.
-            escalated: prevMeta.escalated || escalated,
-            escalationReason: escalated ? escalationReason : (prevMeta.escalationReason ?? null),
-            sentiments: [...(prevMeta.sentiments ?? []), sentiment],
-          },
-          updatedAt: new Date(),
-        })
-        .where(eq(conversations.id, row.id));
-    } else {
-      await db.insert(conversations).values({
+    // full conversations rather than disconnected message pairs. Upserting on
+    // the (demoType, sessionId) unique index makes the read-merge-write atomic,
+    // so it can't race with another writer (e.g. /api/csat) touching the same
+    // row and end up creating a duplicate. The metadata expression merges over
+    // the existing row with `||` rather than replacing it outright, so it can't
+    // silently drop keys (like `csat`) that another writer already set.
+    await db
+      .insert(conversations)
+      .values({
         demoType: demo,
         sessionId: conversationId,
         messages: newTurn,
         metadata: { event: 'message_sent', toolsUsed, hasCustomer, escalated, escalationReason, sentiments: [sentiment] },
+      })
+      .onConflictDoUpdate({
+        target: [conversations.demoType, conversations.sessionId],
+        set: {
+          messages: sql`coalesce(${conversations.messages}, '[]'::jsonb) || ${JSON.stringify(newTurn)}::jsonb`,
+          metadata: sql`
+            coalesce(${conversations.metadata}, '{}'::jsonb) || jsonb_build_object(
+              'event', 'message_sent',
+              'toolsUsed', coalesce(${conversations.metadata}->'toolsUsed', '[]'::jsonb) || ${JSON.stringify(toolsUsed)}::jsonb,
+              'hasCustomer', coalesce((${conversations.metadata}->>'hasCustomer')::boolean, false) OR ${hasCustomer},
+              'escalated', coalesce((${conversations.metadata}->>'escalated')::boolean, false) OR ${escalated},
+              'escalationReason', CASE WHEN ${escalated} THEN ${escalationReason} ELSE (${conversations.metadata}->>'escalationReason') END,
+              'sentiments', coalesce(${conversations.metadata}->'sentiments', '[]'::jsonb) || ${JSON.stringify([sentiment])}::jsonb
+            )
+          `,
+          updatedAt: new Date(),
+        },
       });
-    }
   } catch (err) {
     console.error('[chat] log error:', err);
   }

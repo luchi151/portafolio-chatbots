@@ -8,16 +8,21 @@ interface Props {
   conversationId: string;
   demo: 'chatbot' | 'voicebot';
   token: string | null;
+  rated: 'up' | 'down' | null;
+  onRated: (rating: 'up' | 'down') => void;
 }
 
-export function CsatPrompt({ conversationId, demo, token }: Props) {
-  const [rated, setRated] = useState<'up' | 'down' | null>(null);
+// `rated` is controlled by the parent (not local state) because this
+// component gets unmounted/remounted every time the parent hides it while
+// streaming a new turn — local state would silently forget the rating and
+// re-prompt after every message in an already-rated conversation.
+export function CsatPrompt({ conversationId, demo, token, rated, onRated }: Props) {
   const [sending, setSending] = useState(false);
 
   async function handleRate(rating: 'up' | 'down') {
     if (sending || rated || !token) return;
     setSending(true);
-    setRated(rating);
+    onRated(rating);
     try {
       await fetch('/api/csat', {
         method: 'POST',

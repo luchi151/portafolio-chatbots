@@ -11,6 +11,8 @@ interface Props {
   isStreaming: boolean;
   conversationId?: string;
   token: string | null;
+  csatRating: 'up' | 'down' | null;
+  onCsatRated: (rating: 'up' | 'down') => void;
 }
 
 const SENTIMENT_META: Record<Sentiment, { emoji: string; color: string; label: string }> = {
@@ -27,7 +29,7 @@ const SUGGESTIONS = [
   '¿Qué opciones de pago tengo?',
 ];
 
-export function MessageList({ messages, isStreaming, conversationId, token }: Props) {
+export function MessageList({ messages, isStreaming, conversationId, token, csatRating, onCsatRated }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -138,7 +140,13 @@ export function MessageList({ messages, isStreaming, conversationId, token }: Pr
         );
       })}
       {!isStreaming && conversationId && (
-        <CsatPrompt key={conversationId} conversationId={conversationId} demo="chatbot" token={token} />
+        <CsatPrompt
+          conversationId={conversationId}
+          demo="chatbot"
+          token={token}
+          rated={csatRating}
+          onRated={onCsatRated}
+        />
       )}
       <div ref={bottomRef} />
     </div>

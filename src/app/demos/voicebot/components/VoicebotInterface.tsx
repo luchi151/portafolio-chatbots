@@ -61,6 +61,7 @@ export function VoicebotInterface() {
   const [isSupported, setIsSupported] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
+  const [csatRating, setCsatRating] = useState<'up' | 'down' | null>(null);
 
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -232,6 +233,7 @@ export function VoicebotInterface() {
     shouldProcessRef.current = false;
     conversationIdRef.current = undefined;
     setConversationId(undefined);
+    setCsatRating(null);
     setConversation([]);
     setStatus('idle');
     setInterim('');
@@ -247,7 +249,13 @@ export function VoicebotInterface() {
         onReset={handleReset}
       />
       {status === 'idle' && conversationId && (
-        <CsatPrompt key={conversationId} conversationId={conversationId} demo="voicebot" token={token} />
+        <CsatPrompt
+          conversationId={conversationId}
+          demo="voicebot"
+          token={token}
+          rated={csatRating}
+          onRated={setCsatRating}
+        />
       )}
       <VoiceControls
         status={status}

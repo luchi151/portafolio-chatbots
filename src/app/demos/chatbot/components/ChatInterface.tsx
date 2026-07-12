@@ -40,6 +40,7 @@ export function ChatInterface() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [processingFiles, setProcessingFiles] = useState(false);
   const [conversationId, setConversationId] = useState<string | undefined>();
+  const [csatRating, setCsatRating] = useState<'up' | 'down' | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -221,6 +222,7 @@ export function ChatInterface() {
     abortRef.current?.abort();
     setMessages([]);
     setConversationId(undefined);
+    setCsatRating(null);
     setFiles([]);
     setInput('');
   }
@@ -259,6 +261,8 @@ export function ChatInterface() {
         isStreaming={isStreaming}
         conversationId={conversationId}
         token={token}
+        csatRating={csatRating}
+        onCsatRated={setCsatRating}
       />
 
       {/* File chips */}

@@ -39,32 +39,27 @@ export async function POST(req: NextRequest) {
   try {
     const { db } = await import('@/lib/db');
     const { conversations } = await import('@/lib/db/schema');
-    const { and, eq } = await import('drizzle-orm');
+    const { sql } = await import('drizzle-orm');
 
     const csat = { rating, ratedAt: new Date().toISOString() };
 
-    const existing = await db
-      .select({ id: conversations.id, metadata: conversations.metadata })
-      .from(conversations)
-      .where(and(eq(conversations.demoType, demo), eq(conversations.sessionId, conversationId)))
-      .limit(1);
-
-    if (existing.length > 0) {
-      const row = existing[0];
-      const prevMeta = (row.metadata as Record<string, unknown>) ?? {};
-      await db
-        .update(conversations)
-        .set({ metadata: { ...prevMeta, csat }, updatedAt: new Date() })
-        .where(eq(conversations.id, row.id));
-    } else {
-      // Puede llegar antes de que logConversation() persista la primera fila
-      // (después() se dispara casi al mismo tiempo que el evento `done` al cliente).
-      await db.insert(conversations).values({
-        demoType: demo,
-        sessionId: conversationId,
-        metadata: { csat },
+    // Upsert on the (demoType, sessionId) unique index instead of a manual
+    // select-then-branch — this can arrive before, after, or concurrently
+    // with logConversation()'s own write to the same row (after() fires
+    // close to the `done` event the client uses to reveal this prompt), so
+    // the read-merge-write needs to be atomic. The `||` merge only ever
+    // touches the `csat` key, so it can't clobber fields the chat route
+    // writes concurrently (toolsUsed, sentiments, escalated, ...).
+    await db
+      .insert(conversations)
+      .values({ demoType: demo, sessionId: conversationId, metadata: { csat } })
+      .onConflictDoUpdate({
+        target: [conversations.demoType, conversations.sessionId],
+        set: {
+          metadata: sql`coalesce(${conversations.metadata}, '{}'::jsonb) || ${JSON.stringify({ csat })}::jsonb`,
+          updatedAt: new Date(),
+        },
       });
-    }
 
     return Response.json({ ok: true });
   } catch (err) {

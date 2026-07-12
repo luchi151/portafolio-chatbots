@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, numeric, timestamp, jsonb, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, numeric, timestamp, jsonb, integer, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const customers = pgTable('customers', {
@@ -15,16 +15,28 @@ export const customers = pgTable('customers', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
 
-export const conversations = pgTable('conversations', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  demoType: text('demo_type').notNull(),
-  sessionId: text('session_id'),
-  userId: uuid('user_id'),
-  messages: jsonb('messages').default(sql`'[]'::jsonb`),
-  metadata: jsonb('metadata').default(sql`'{}'::jsonb`),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-});
+export const conversations = pgTable(
+  'conversations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    demoType: text('demo_type').notNull(),
+    sessionId: text('session_id'),
+    userId: uuid('user_id'),
+    messages: jsonb('messages').default(sql`'[]'::jsonb`),
+    metadata: jsonb('metadata').default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    // One row per (demoType, sessionId): chat/csat writers upsert on this
+    // constraint instead of a manual select-then-insert/update, which closes
+    // the race where two concurrent writers (e.g. a chat turn and a CSAT
+    // rating landing at the same time) both miss each other's row and each
+    // insert a duplicate. Postgres treats NULL session_id as distinct across
+    // rows, so db_query rows (which never set sessionId) are unaffected.
+    uniqueIndex('conversations_demo_session_idx').on(table.demoType, table.sessionId),
+  ],
+);
 
 export const documents = pgTable('documents', {
   id: uuid('id').primaryKey().defaultRandom(),
