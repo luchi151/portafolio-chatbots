@@ -2,6 +2,7 @@ import { Navbar } from '@/components/marketing/Navbar';
 import { Footer } from '@/components/marketing/Footer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
+  getConversationSentimentStats,
   getCsatStats,
   getDbQueryStats,
   getDailyActivity,
@@ -14,12 +15,23 @@ import { StatsCards } from './components/StatsCards';
 import { ActivityChart } from './components/ActivityChart';
 import { ToolUsageChart } from './components/ToolUsageChart';
 import { SentimentChart } from './components/SentimentChart';
+import { ConversationSemaforoChart } from './components/ConversationSemaforoChart';
+import { ConversationSemaforoList } from './components/ConversationSemaforoList';
 
 // Must reflect live activity, not a build-time snapshot.
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsPage() {
-  const [demoCounts, dailyActivity, toolUsage, dbStats, escalationStats, csatStats, sentimentStats] = await Promise.all([
+  const [
+    demoCounts,
+    dailyActivity,
+    toolUsage,
+    dbStats,
+    escalationStats,
+    csatStats,
+    sentimentStats,
+    conversationSentimentStats,
+  ] = await Promise.all([
     getDemoCounts(),
     getDailyActivity(),
     getToolUsage(),
@@ -27,6 +39,7 @@ export default async function AnalyticsPage() {
     getEscalationStats(),
     getCsatStats(),
     getSentimentStats(),
+    getConversationSentimentStats(),
   ]);
 
   return (
@@ -72,6 +85,24 @@ export default async function AnalyticsPage() {
               </CardHeader>
               <CardContent>
                 <SentimentChart data={sentimentStats} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-semibold">Estado de conversaciones (semáforo)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ConversationSemaforoChart data={conversationSentimentStats} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-semibold">Conversaciones recientes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ConversationSemaforoList conversations={conversationSentimentStats.recent} />
               </CardContent>
             </Card>
           </div>

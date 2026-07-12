@@ -53,6 +53,36 @@ export interface SentimentStats {
   negativeRate: number; // % of negative+frustrated over total
 }
 
+export type Semaforo = 'verde' | 'amarillo' | 'rojo';
+
+export interface ConversationSentimentSummary {
+  id: string;
+  demoType: string;
+  createdAt: Date | null;
+  messageCount: number;
+  avgScore: number; // 0 (frustrated) - 3 (positive)
+  state: Semaforo;
+}
+
+export interface ConversationSentimentStats {
+  verde: number;
+  amarillo: number;
+  rojo: number;
+  total: number;
+  recent: ConversationSentimentSummary[];
+}
+
+// Higher score = better tone. Used to average a conversation's per-message
+// sentiments into a single semaforo verdict, rather than tracking a separate
+// end-of-conversation state.
+const SENTIMENT_SCORE: Record<string, number> = { frustrated: 0, negative: 1, neutral: 2, positive: 3 };
+
+function classifySemaforo(avgScore: number): Semaforo {
+  if (avgScore >= 2) return 'verde';
+  if (avgScore >= 1) return 'amarillo';
+  return 'rojo';
+}
+
 // Row volume for a portfolio demo is small — fetch the relevant columns once
 // and aggregate in JS rather than reaching for raw SQL (date_trunc,
 // jsonb_array_elements_text) for a handful of dashboard numbers.
@@ -238,5 +268,62 @@ export async function getSentimentStats(): Promise<SentimentStats> {
   } catch (err) {
     console.error('[analytics] getSentimentStats error:', err);
     return { positive: 0, neutral: 0, negative: 0, frustrated: 0, total: 0, negativeRate: 0 };
+  }
+}
+
+export async function getConversationSentimentStats(recentLimit = 8): Promise<ConversationSentimentStats> {
+  try {
+    const db = await getDb();
+    const rows = await db
+      .select({
+        id: conversations.id,
+        demoType: conversations.demoType,
+        createdAt: conversations.createdAt,
+        metadata: conversations.metadata,
+      })
+      .from(conversations);
+
+    const summaries: ConversationSentimentSummary[] = [];
+    for (const r of rows) {
+      if (r.demoType !== 'chatbot' && r.demoType !== 'voicebot') continue;
+      const sentiments = (r.metadata as { sentiments?: unknown })?.sentiments;
+      if (!Array.isArray(sentiments) || sentiments.length === 0) continue;
+
+      let sum = 0;
+      let count = 0;
+      for (const s of sentiments) {
+        const score = SENTIMENT_SCORE[s as string];
+        if (score === undefined) continue;
+        sum += score;
+        count += 1;
+      }
+      if (count === 0) continue;
+
+      const avgScore = sum / count;
+      summaries.push({
+        id: r.id,
+        demoType: r.demoType,
+        createdAt: r.createdAt,
+        messageCount: count,
+        avgScore,
+        state: classifySemaforo(avgScore),
+      });
+    }
+
+    summaries.sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+
+    let verde = 0;
+    let amarillo = 0;
+    let rojo = 0;
+    for (const s of summaries) {
+      if (s.state === 'verde') verde += 1;
+      else if (s.state === 'amarillo') amarillo += 1;
+      else rojo += 1;
+    }
+
+    return { verde, amarillo, rojo, total: summaries.length, recent: summaries.slice(0, recentLimit) };
+  } catch (err) {
+    console.error('[analytics] getConversationSentimentStats error:', err);
+    return { verde: 0, amarillo: 0, rojo: 0, total: 0, recent: [] };
   }
 }
