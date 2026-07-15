@@ -8,6 +8,7 @@ import { ToolUsageChart } from './components/ToolUsageChart';
 import { SentimentChart } from './components/SentimentChart';
 import { ConversationSemaforoChart } from './components/ConversationSemaforoChart';
 import { ConversationSemaforoList } from './components/ConversationSemaforoList';
+import { FadeInSection } from './components/FadeInSection';
 
 // Must reflect live activity, not a build-time snapshot.
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,7 @@ export default async function AnalyticsPage() {
     csatStats,
     sentimentStats,
     conversationSentimentStats,
+    trend,
   } = await getAnalyticsDashboardData();
 
   return (
@@ -35,58 +37,71 @@ export default async function AnalyticsPage() {
           </p>
 
           <div className="flex flex-col gap-6">
-            <StatsCards
-              demoCounts={demoCounts}
-              toolUsage={toolUsage}
-              dbStats={dbStats}
-              escalationStats={escalationStats}
-              csatStats={csatStats}
-            />
+            <FadeInSection>
+              <StatsCards
+                demoCounts={demoCounts}
+                toolUsage={toolUsage}
+                dbStats={dbStats}
+                escalationStats={escalationStats}
+                csatStats={csatStats}
+                trend={trend}
+              />
+            </FadeInSection>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base font-semibold">Actividad diaria (últimos 21 días)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ActivityChart data={dailyActivity} />
-              </CardContent>
-            </Card>
+            <FadeInSection delay={0.05}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold">Actividad diaria (últimos 21 días)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ActivityChart data={dailyActivity} />
+                </CardContent>
+              </Card>
+            </FadeInSection>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base font-semibold">Herramientas del agente más usadas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ToolUsageChart data={toolUsage} />
-              </CardContent>
-            </Card>
+            <FadeInSection delay={0.1}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold">Herramientas del agente más usadas</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ToolUsageChart data={toolUsage} />
+                </CardContent>
+              </Card>
+            </FadeInSection>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base font-semibold">Sentimiento del cliente</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SentimentChart data={sentimentStats} />
-              </CardContent>
-            </Card>
+            <FadeInSection delay={0.1}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold">Sentimiento del cliente</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <SentimentChart data={sentimentStats} />
+                </CardContent>
+              </Card>
+            </FadeInSection>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base font-semibold">Estado de conversaciones (semáforo)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ConversationSemaforoChart data={conversationSentimentStats} />
-              </CardContent>
-            </Card>
+            <FadeInSection delay={0.1}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold">Estado de conversaciones (semáforo)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ConversationSemaforoChart data={conversationSentimentStats} />
+                </CardContent>
+              </Card>
+            </FadeInSection>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base font-semibold">Conversaciones que requieren atención</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ConversationSemaforoList conversations={conversationSentimentStats.recent} />
-              </CardContent>
-            </Card>
+            <FadeInSection delay={0.1}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold">Conversaciones que requieren atención</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ConversationSemaforoList conversations={conversationSentimentStats.recent} />
+                </CardContent>
+              </Card>
+            </FadeInSection>
           </div>
         </div>
       </main>

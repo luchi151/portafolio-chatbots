@@ -82,10 +82,13 @@ export function ConversationSemaforoList({ conversations }: Props) {
             <button
               type="button"
               onClick={() => openConversation(c.id)}
-              className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md py-2.5 text-left text-sm transition-colors hover:bg-muted/50"
+              className="group flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border border-transparent px-2 py-2.5 text-left text-sm transition-all duration-150 hover:border-border hover:bg-muted hover:shadow-sm"
             >
               <span className="flex items-center gap-2">
-                <span className="size-2.5 shrink-0 rounded-full" style={{ background: SEMAFORO_DOT[c.state] }} />
+                <span
+                  className="size-2.5 shrink-0 rounded-full transition-transform duration-150 group-hover:scale-125"
+                  style={{ background: SEMAFORO_DOT[c.state] }}
+                />
                 <span className="font-medium">{DEMO_LABELS[c.demoType] ?? c.demoType}</span>
                 <span className="text-xs text-muted-foreground">{formatDate(c.createdAt)}</span>
                 <span className="font-mono text-[11px] text-muted-foreground">#{c.id.slice(0, 8)}</span>

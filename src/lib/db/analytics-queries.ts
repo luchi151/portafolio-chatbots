@@ -87,6 +87,21 @@ export interface ConversationDetail {
   messages: ConversationMessage[];
 }
 
+// deltaPct is a relative % change (current vs previous) for count-based
+// metrics, but a percentage-POINT difference for rate-based metrics like
+// csatSatisfaction — callers must know which one they're rendering.
+export interface TrendPoint {
+  current: number;
+  previous: number;
+  deltaPct: number | null; // null when there's no previous-period data to compare against
+}
+
+export interface TrendStats {
+  totalInteractions: TrendPoint;
+  escalations: TrendPoint;
+  csatSatisfaction: TrendPoint;
+}
+
 export interface AnalyticsDashboardData {
   demoCounts: DemoCount[];
   dailyActivity: DailyActivityPoint[];
@@ -96,6 +111,7 @@ export interface AnalyticsDashboardData {
   csatStats: CsatStats;
   sentimentStats: SentimentStats;
   conversationSentimentStats: ConversationSentimentStats;
+  trend: TrendStats;
 }
 
 // Higher score = better tone. Used to average a conversation's per-message
@@ -293,6 +309,74 @@ function computeConversationSentimentStats(rows: ConversationRow[], recentLimit:
   return { verde, amarillo, rojo, total: summaries.length, recent: summaries.slice(0, recentLimit) };
 }
 
+// Period-over-period comparison so StatsCards can show a ↑/↓ trend, not just
+// a raw total. Window length matches the activity chart's `days` so both
+// reflect the same "recent" definition.
+function computeTrend(rows: ConversationRow[], days: number): TrendStats {
+  const now = Date.now();
+  const periodMs = days * 24 * 60 * 60 * 1000;
+  const currentStart = now - periodMs;
+  const previousStart = now - 2 * periodMs;
+
+  let curTotal = 0;
+  let prevTotal = 0;
+  let curEsc = 0;
+  let prevEsc = 0;
+  let curCsatUp = 0;
+  let curCsatTotal = 0;
+  let prevCsatUp = 0;
+  let prevCsatTotal = 0;
+
+  for (const r of rows) {
+    const t = r.createdAt?.getTime();
+    if (t === undefined) continue;
+    const isCurrent = t >= currentStart;
+    const isPrevious = t >= previousStart && t < currentStart;
+    if (!isCurrent && !isPrevious) continue;
+
+    if (isCurrent) curTotal += 1;
+    else prevTotal += 1;
+
+    if (r.demoType !== 'chatbot' && r.demoType !== 'voicebot') continue;
+    const meta = r.metadata as { escalated?: unknown; csat?: { rating?: unknown } } | null;
+
+    if (meta?.escalated === true) {
+      if (isCurrent) curEsc += 1;
+      else prevEsc += 1;
+    }
+
+    const rating = meta?.csat?.rating;
+    if (rating === 'up' || rating === 'down') {
+      if (isCurrent) {
+        curCsatTotal += 1;
+        if (rating === 'up') curCsatUp += 1;
+      } else {
+        prevCsatTotal += 1;
+        if (rating === 'up') prevCsatUp += 1;
+      }
+    }
+  }
+
+  // A previous-period base under this size makes the % change swing wildly
+  // (e.g. 1→5 reads as "+400%") and reads as noise, not a real trend — treat
+  // it the same as "no previous data" rather than showing a misleading spike.
+  const MIN_SAMPLE = 3;
+  const relativePct = (a: number, b: number): number | null =>
+    b < MIN_SAMPLE ? null : Math.round(((a - b) / b) * 100);
+  const curCsatRate = curCsatTotal > 0 ? Math.round((curCsatUp / curCsatTotal) * 100) : 0;
+  const prevCsatRate = prevCsatTotal > 0 ? Math.round((prevCsatUp / prevCsatTotal) * 100) : 0;
+
+  return {
+    totalInteractions: { current: curTotal, previous: prevTotal, deltaPct: relativePct(curTotal, prevTotal) },
+    escalations: { current: curEsc, previous: prevEsc, deltaPct: relativePct(curEsc, prevEsc) },
+    csatSatisfaction: {
+      current: curCsatRate,
+      previous: prevCsatRate,
+      deltaPct: prevCsatTotal < MIN_SAMPLE ? null : curCsatRate - prevCsatRate,
+    },
+  };
+}
+
 // ─── Conversation detail (public, redacted) ──────────────────────────────────
 // The panel is public and unauthenticated, but this is a debt-collection demo
 // — transcripts can contain the customer's name, debt amount or document id.
@@ -400,5 +484,6 @@ export async function getAnalyticsDashboardData(
     csatStats: computeCsatStats(rows),
     sentimentStats: computeSentimentStats(rows),
     conversationSentimentStats: computeConversationSentimentStats(rows, recentConversations),
+    trend: computeTrend(rows, activityDays),
   };
 }

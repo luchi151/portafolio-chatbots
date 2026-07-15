@@ -1,5 +1,14 @@
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { CsatStats, DbQueryStats, DemoCount, EscalationStats, ToolUsageCount } from '@/lib/db/analytics-queries';
+import type {
+  CsatStats,
+  DbQueryStats,
+  DemoCount,
+  EscalationStats,
+  ToolUsageCount,
+  TrendPoint,
+  TrendStats,
+} from '@/lib/db/analytics-queries';
 
 const DEMO_LABELS: Record<string, { label: string; color: string }> = {
   chatbot: { label: 'Chatbot de cobranza', color: '#3b82f6' },
@@ -13,9 +22,37 @@ interface Props {
   dbStats: DbQueryStats;
   escalationStats: EscalationStats;
   csatStats: CsatStats;
+  trend: TrendStats;
 }
 
-export function StatsCards({ demoCounts, toolUsage, dbStats, escalationStats, csatStats }: Props) {
+// Not every metric means "up is good" — escalations going up is bad news,
+// so the color has to be driven by which direction is actually desirable.
+function TrendBadge({
+  point,
+  goodDirection = 'up',
+  unit = '%',
+}: {
+  point: TrendPoint;
+  goodDirection?: 'up' | 'down';
+  unit?: '%' | 'pts';
+}) {
+  if (point.deltaPct === null) {
+    return <p className="text-xs text-muted-foreground">Muestra insuficiente para comparar</p>;
+  }
+  if (point.deltaPct === 0) {
+    return <p className="text-xs text-muted-foreground">= vs. período anterior</p>;
+  }
+  const isUp = point.deltaPct > 0;
+  const isGood = isUp === (goodDirection === 'up');
+  return (
+    <p className={cn('text-xs font-medium', isGood ? 'text-[#10b981]' : 'text-[#ef4444]')}>
+      {isUp ? '↑' : '↓'} {Math.abs(point.deltaPct)}
+      {unit} vs. período anterior
+    </p>
+  );
+}
+
+export function StatsCards({ demoCounts, toolUsage, dbStats, escalationStats, csatStats, trend }: Props) {
   const total = demoCounts.reduce((sum, d) => sum + d.count, 0);
   const totalToolCalls = toolUsage.reduce((sum, t) => sum + t.count, 0);
 
@@ -27,6 +64,7 @@ export function StatsCards({ demoCounts, toolUsage, dbStats, escalationStats, cs
         </CardHeader>
         <CardContent>
           <p className="text-3xl font-bold">{total}</p>
+          <TrendBadge point={trend.totalInteractions} />
         </CardContent>
       </Card>
 
@@ -76,6 +114,7 @@ export function StatsCards({ demoCounts, toolUsage, dbStats, escalationStats, cs
         <CardContent>
           <p className="text-3xl font-bold">{escalationStats.totalEscalated}</p>
           <p className="text-xs text-muted-foreground">{escalationStats.escalationRate}% de las conversaciones</p>
+          <TrendBadge point={trend.escalations} goodDirection="down" />
         </CardContent>
       </Card>
 
@@ -86,6 +125,7 @@ export function StatsCards({ demoCounts, toolUsage, dbStats, escalationStats, cs
         <CardContent>
           <p className="text-3xl font-bold">{csatStats.satisfactionRate}%</p>
           <p className="text-xs text-muted-foreground">{csatStats.totalRated} valoraciones</p>
+          <TrendBadge point={trend.csatSatisfaction} unit="pts" />
         </CardContent>
       </Card>
     </div>
