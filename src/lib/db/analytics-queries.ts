@@ -20,6 +20,7 @@ export interface DailyActivityPoint {
   chatbot: number;
   voicebot: number;
   db_query: number;
+  support: number;
 }
 
 export interface ToolUsageCount {
@@ -165,8 +166,8 @@ function computeDailyActivity(rows: ConversationRow[], days: number): DailyActiv
   for (const r of rows) {
     if (!r.createdAt || r.createdAt < since) continue;
     const day = r.createdAt.toISOString().slice(0, 10);
-    const point = byDay.get(day) ?? { day, chatbot: 0, voicebot: 0, db_query: 0 };
-    if (r.demoType === 'chatbot' || r.demoType === 'voicebot' || r.demoType === 'db_query') {
+    const point = byDay.get(day) ?? { day, chatbot: 0, voicebot: 0, db_query: 0, support: 0 };
+    if (r.demoType === 'chatbot' || r.demoType === 'voicebot' || r.demoType === 'db_query' || r.demoType === 'support') {
       point[r.demoType] += 1;
     }
     byDay.set(day, point);

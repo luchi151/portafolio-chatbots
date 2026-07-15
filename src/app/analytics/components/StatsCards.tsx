@@ -14,6 +14,7 @@ const DEMO_LABELS: Record<string, { label: string; color: string }> = {
   chatbot: { label: 'Chatbot de cobranza', color: '#3b82f6' },
   voicebot: { label: 'Agente de voz', color: '#10b981' },
   db_query: { label: 'Consultas NL → SQL', color: '#8b5cf6' },
+  support: { label: 'Soporte (RAG)', color: '#f59e0b' },
 };
 
 interface Props {

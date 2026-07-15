@@ -20,6 +20,7 @@ const SERIES = [
   { key: 'chatbot' as const, name: 'Chatbot', color: '#3b82f6' },
   { key: 'voicebot' as const, name: 'Voicebot', color: '#10b981' },
   { key: 'db_query' as const, name: 'DB Query', color: '#8b5cf6' },
+  { key: 'support' as const, name: 'Soporte (RAG)', color: '#f59e0b' },
 ];
 
 export function ActivityChart({ data }: Props) {
