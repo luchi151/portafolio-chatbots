@@ -15,6 +15,8 @@ Portafolio profesional que demuestra capacidades en IA conversacional mediante d
 - `pnpm drizzle-kit push` — Push schema changes to database
 - `pnpm drizzle-kit generate` — Generate migrations
 - `pnpm tsx src/lib/db/seed.ts` — Seed database with demo data
+- `pnpm tsx src/lib/db/migrate-knowledge-base.ts` — Enable pgvector and create the knowledge_base table
+- `pnpm tsx src/lib/db/seed-knowledge.ts` — Generate embeddings and seed the RAG support-chat knowledge base
 
 ## Tech Stack
 

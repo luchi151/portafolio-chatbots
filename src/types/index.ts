@@ -11,6 +11,13 @@ export interface ToolCall {
 
 export type Sentiment = 'positive' | 'neutral' | 'negative' | 'frustrated';
 
+export interface RagSource {
+  id: string;
+  title: string;
+  content: string;
+  similarity: number;
+}
+
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -18,6 +25,7 @@ export interface Message {
   toolCalls?: ToolCall[];
   agentStep?: string;
   sentiment?: Sentiment;
+  sources?: RagSource[];
 }
 
 export interface ChatResponse {

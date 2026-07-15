@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, numeric, timestamp, jsonb, integer, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, numeric, timestamp, jsonb, integer, uniqueIndex, vector } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const customers = pgTable('customers', {
@@ -54,6 +54,18 @@ export const demoSessions = pgTable('demo_sessions', {
   userAgent: text('user_agent'),
   requestsCount: integer('requests_count').default(1),
   lastRequestAt: timestamp('last_request_at', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+});
+
+// FAQ/policy entries for the RAG support-chat demo. Each row is already a
+// right-sized "chunk" — no chunking pipeline, entries are authored as
+// standalone Q&A/policy snippets. Embedding dimension (512) must match the
+// output_dimension requested from Voyage AI in src/lib/rag/embeddings.ts.
+export const knowledgeBase = pgTable('knowledge_base', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  embedding: vector('embedding', { dimensions: 512 }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 

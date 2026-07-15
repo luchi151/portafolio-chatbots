@@ -7,6 +7,7 @@ const DEMOS = [
   { label: 'Chatbot RAG', href: '/demos/chatbot' },
   { label: 'Voicebot', href: '/demos/voicebot' },
   { label: 'NL → SQL', href: '/demos/db-query' },
+  { label: 'Soporte (RAG)', href: '/demos/support' },
 ] as const;
 
 export function DemoNav() {

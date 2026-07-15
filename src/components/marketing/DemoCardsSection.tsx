@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { MessageSquare, Mic, Database } from 'lucide-react';
+import { MessageSquare, Mic, Database, HelpCircle } from 'lucide-react';
 import { DemoCard } from './DemoCard';
 
 const DEMOS = [
@@ -31,6 +31,15 @@ const DEMOS = [
     href: '/demos/db-query',
     icon: <Database className="size-5" />,
     accentColor: '#8b5cf6',
+  },
+  {
+    title: 'Soporte con RAG',
+    description:
+      'Chat de FAQ/políticas que recupera contexto real desde una base de conocimiento vectorial antes de responder.',
+    tags: ['Voyage AI', 'pgvector', 'DeepSeek', 'RAG'],
+    href: '/demos/support',
+    icon: <HelpCircle className="size-5" />,
+    accentColor: '#f59e0b',
   },
 ] as const;
 

@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, RATE_LIMIT } from '@/lib/rate-limiter';
 import { extractBearerToken, verifyDemoToken } from '@/lib/jwt';
 
-const PROTECTED = ['/api/chat', '/api/voice/', '/api/db/query', '/api/csat'];
+const PROTECTED = ['/api/chat', '/api/voice/', '/api/db/query', '/api/csat', '/api/support-chat'];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -55,5 +55,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/api/chat', '/api/voice/:path*', '/api/db/query', '/api/csat'],
+  matcher: ['/api/chat', '/api/voice/:path*', '/api/db/query', '/api/csat', '/api/support-chat'],
 };
