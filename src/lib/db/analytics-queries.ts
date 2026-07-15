@@ -1,4 +1,4 @@
-import { conversations } from './schema';
+import { conversations, customers } from './schema';
 
 // db/index.ts throws at import time if DATABASE_URL is unset, so it's
 // imported lazily inside getDb() — matches the pattern already used in the
@@ -69,6 +69,21 @@ export interface ConversationSentimentStats {
   rojo: number;
   total: number;
   recent: ConversationSentimentSummary[];
+}
+
+export interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ConversationDetail {
+  id: string;
+  demoType: string;
+  createdAt: Date | null;
+  state: Semaforo;
+  escalated: boolean;
+  escalationReason: string | null;
+  messages: ConversationMessage[];
 }
 
 export interface AnalyticsDashboardData {
@@ -255,7 +270,15 @@ function computeConversationSentimentStats(rows: ConversationRow[], recentLimit:
     });
   }
 
-  summaries.sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  // Urgency first (rojo needs attention before amarillo/verde), then most
+  // recent within the same tier — this list drives a "panel de atención",
+  // not a chronological feed.
+  const STATE_PRIORITY: Record<Semaforo, number> = { rojo: 0, amarillo: 1, verde: 2 };
+  summaries.sort((a, b) => {
+    const byState = STATE_PRIORITY[a.state] - STATE_PRIORITY[b.state];
+    if (byState !== 0) return byState;
+    return (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0);
+  });
 
   let verde = 0;
   let amarillo = 0;
@@ -267,6 +290,96 @@ function computeConversationSentimentStats(rows: ConversationRow[], recentLimit:
   }
 
   return { verde, amarillo, rojo, total: summaries.length, recent: summaries.slice(0, recentLimit) };
+}
+
+// ─── Conversation detail (public, redacted) ──────────────────────────────────
+// The panel is public and unauthenticated, but this is a debt-collection demo
+// — transcripts can contain the customer's name, debt amount or document id.
+// Best-effort redaction here (not full NLP) is enough for fictional seed data
+// and keeps the raw text out of the response entirely rather than trusting the
+// client to hide it.
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MONEY_RE = /\$?\s?\d{1,3}(?:[.,]\d{3})+(?:\s?cop)?/gi;
+const LONG_DIGITS_RE = /\b\d{6,}\b/g;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function fetchCustomerNames(): Promise<string[]> {
+  try {
+    const db = await getDb();
+    const rows = await db.select({ name: customers.name }).from(customers);
+    return rows.map((r) => r.name).filter(Boolean);
+  } catch (err) {
+    console.error('[analytics] fetchCustomerNames error:', err);
+    return [];
+  }
+}
+
+function redactPII(text: string, customerNames: string[]): string {
+  let out = text.replace(MONEY_RE, '[monto]').replace(LONG_DIGITS_RE, '[documento]');
+  const tokens = new Set<string>();
+  for (const name of customerNames) {
+    for (const token of name.split(/\s+/)) {
+      if (token.length >= 3) tokens.add(token);
+    }
+  }
+  for (const token of tokens) {
+    out = out.replace(new RegExp(`\\b${escapeRegExp(token)}\\b`, 'gi'), '[cliente]');
+  }
+  return out;
+}
+
+export async function getConversationDetail(id: string): Promise<ConversationDetail | null> {
+  if (!UUID_RE.test(id)) return null;
+  try {
+    const db = await getDb();
+    const { eq } = await import('drizzle-orm');
+    const rows = await db.select().from(conversations).where(eq(conversations.id, id)).limit(1);
+    if (rows.length === 0) return null;
+
+    const row = rows[0];
+    if (row.demoType !== 'chatbot' && row.demoType !== 'voicebot') return null;
+
+    const rawMessages = Array.isArray(row.messages) ? (row.messages as unknown[]) : [];
+    const meta = row.metadata as { sentiments?: unknown; escalated?: unknown; escalationReason?: unknown } | null;
+
+    const customerNames = await fetchCustomerNames();
+    const messages: ConversationMessage[] = rawMessages
+      .filter(
+        (m): m is { role: string; content: string } =>
+          typeof m === 'object' && m !== null && 'role' in m && 'content' in m,
+      )
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: redactPII(String(m.content), customerNames) }));
+
+    const sentiments = Array.isArray(meta?.sentiments) ? (meta.sentiments as unknown[]) : [];
+    let sum = 0;
+    let count = 0;
+    for (const s of sentiments) {
+      const score = SENTIMENT_SCORE[s as string];
+      if (score === undefined) continue;
+      sum += score;
+      count += 1;
+    }
+    const state = classifySemaforo(count > 0 ? sum / count : 2);
+
+    return {
+      id: row.id,
+      demoType: row.demoType,
+      createdAt: row.createdAt,
+      state,
+      escalated: meta?.escalated === true,
+      escalationReason:
+        typeof meta?.escalationReason === 'string' ? redactPII(meta.escalationReason, customerNames) : null,
+      messages,
+    };
+  } catch (err) {
+    console.error('[analytics] getConversationDetail error:', err);
+    return null;
+  }
 }
 
 export async function getAnalyticsDashboardData(

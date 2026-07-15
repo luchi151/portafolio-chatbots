@@ -81,7 +81,7 @@ export default async function AnalyticsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base font-semibold">Conversaciones recientes</CardTitle>
+                <CardTitle className="text-base font-semibold">Conversaciones que requieren atención</CardTitle>
               </CardHeader>
               <CardContent>
                 <ConversationSemaforoList conversations={conversationSentimentStats.recent} />
