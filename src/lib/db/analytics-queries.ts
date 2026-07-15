@@ -83,6 +83,7 @@ export interface ConversationDetail {
   state: Semaforo;
   escalated: boolean;
   escalationReason: string | null;
+  escalationTicketId: string | null;
   messages: ConversationMessage[];
 }
 
@@ -344,7 +345,9 @@ export async function getConversationDetail(id: string): Promise<ConversationDet
     if (row.demoType !== 'chatbot' && row.demoType !== 'voicebot') return null;
 
     const rawMessages = Array.isArray(row.messages) ? (row.messages as unknown[]) : [];
-    const meta = row.metadata as { sentiments?: unknown; escalated?: unknown; escalationReason?: unknown } | null;
+    const meta = row.metadata as
+      | { sentiments?: unknown; escalated?: unknown; escalationReason?: unknown; escalationTicketId?: unknown }
+      | null;
 
     const customerNames = await fetchCustomerNames();
     const messages: ConversationMessage[] = rawMessages
@@ -374,6 +377,7 @@ export async function getConversationDetail(id: string): Promise<ConversationDet
       escalated: meta?.escalated === true,
       escalationReason:
         typeof meta?.escalationReason === 'string' ? redactPII(meta.escalationReason, customerNames) : null,
+      escalationTicketId: typeof meta?.escalationTicketId === 'string' ? meta.escalationTicketId : null,
       messages,
     };
   } catch (err) {

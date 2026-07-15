@@ -224,6 +224,7 @@ async function logConversation(
   hasCustomer: boolean,
   escalated: boolean,
   escalationReason: string | null,
+  escalationTicketId: string | null,
   sentiment: Sentiment,
 ): Promise<void> {
   if (!process.env.DATABASE_URL) return;
@@ -251,7 +252,15 @@ async function logConversation(
         demoType: demo,
         sessionId: conversationId,
         messages: newTurn,
-        metadata: { event: 'message_sent', toolsUsed, hasCustomer, escalated, escalationReason, sentiments: [sentiment] },
+        metadata: {
+          event: 'message_sent',
+          toolsUsed,
+          hasCustomer,
+          escalated,
+          escalationReason,
+          escalationTicketId,
+          sentiments: [sentiment],
+        },
       })
       .onConflictDoUpdate({
         target: [conversations.demoType, conversations.sessionId],
@@ -264,6 +273,7 @@ async function logConversation(
               'hasCustomer', coalesce((${conversations.metadata}->>'hasCustomer')::boolean, false) OR ${hasCustomer},
               'escalated', coalesce((${conversations.metadata}->>'escalated')::boolean, false) OR ${escalated},
               'escalationReason', CASE WHEN ${escalated} THEN ${escalationReason} ELSE (${conversations.metadata}->>'escalationReason') END,
+              'escalationTicketId', CASE WHEN ${escalated} THEN ${escalationTicketId} ELSE (${conversations.metadata}->>'escalationTicketId') END,
               'sentiments', coalesce(${conversations.metadata}->'sentiments', '[]'::jsonb) || ${JSON.stringify([sentiment])}::jsonb
             )
           `,
@@ -389,7 +399,18 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
     if (rawToolCalls.length === 0) {
       if (assistantMsg?.content) emit({ type: 'text', text: assistantMsg.content });
       after(() =>
-        logConversation(demo, newConversationId, message.trim(), assistantMsg?.content ?? '', [], !!customer, false, null, sentiment),
+        logConversation(
+          demo,
+          newConversationId,
+          message.trim(),
+          assistantMsg?.content ?? '',
+          [],
+          !!customer,
+          false,
+          null,
+          null,
+          sentiment,
+        ),
       );
       return;
     }
@@ -398,6 +419,7 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
     const toolResultMsgs: LLMMessage[] = [];
     let escalated = false;
     let escalationReason: string | null = null;
+    let escalationTicketId: string | null = null;
     for (const tc of rawToolCalls) {
       let args: Record<string, unknown> = {};
       try { args = JSON.parse(tc.function.arguments) as Record<string, unknown>; } catch { /* ignore */ }
@@ -409,6 +431,10 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
 
       emit({ type: 'tool_start', name: tc.function.name });
       const result = executeTool(tc.function.name, args, customer);
+      if (tc.function.name === 'escalar_a_agente') {
+        const ticket = (result as { ticket_id?: unknown }).ticket_id;
+        if (typeof ticket === 'string') escalationTicketId = ticket;
+      }
       emit({ type: 'tool_call', name: tc.function.name, arguments: args, result });
       toolResultMsgs.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
     }
@@ -470,10 +496,17 @@ Usa exclusivamente estos datos. No corrijas ni redondees las cifras.`;
           !!customer,
           escalated,
           escalationReason,
+          escalationTicketId,
           sentiment,
         ),
         escalated
-          ? notifyEscalation(demo, newConversationId, escalationReason ?? 'No especificado', customer?.name ?? null)
+          ? notifyEscalation(
+              demo,
+              newConversationId,
+              escalationReason ?? 'No especificado',
+              customer?.name ?? null,
+              escalationTicketId,
+            )
           : Promise.resolve(),
       ]),
     );

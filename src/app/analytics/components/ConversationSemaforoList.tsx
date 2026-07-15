@@ -25,6 +25,28 @@ function formatDate(date: Date | string | null): string {
   return new Date(date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+// Click-to-copy identifier — used for the conversation id and, for escalated
+// cases, the ticket id an advisor would reference when following up.
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={async (e) => {
+        e.stopPropagation();
+        await navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      title="Copiar identificador"
+      className="font-mono text-xs text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
+    >
+      {copied ? 'Copiado ✓' : label}
+    </button>
+  );
+}
+
 export function ConversationSemaforoList({ conversations }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
@@ -66,6 +88,7 @@ export function ConversationSemaforoList({ conversations }: Props) {
                 <span className="size-2.5 shrink-0 rounded-full" style={{ background: SEMAFORO_DOT[c.state] }} />
                 <span className="font-medium">{DEMO_LABELS[c.demoType] ?? c.demoType}</span>
                 <span className="text-xs text-muted-foreground">{formatDate(c.createdAt)}</span>
+                <span className="font-mono text-[11px] text-muted-foreground">#{c.id.slice(0, 8)}</span>
                 {c.state === 'rojo' && <Badge variant="destructive">Requiere atención</Badge>}
               </span>
               <span className="text-xs text-muted-foreground">
@@ -79,9 +102,10 @@ export function ConversationSemaforoList({ conversations }: Props) {
       <Dialog open={selectedId !== null} onOpenChange={(open) => !open && setSelectedId(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex flex-wrap items-center gap-2">
               {detail && <span className="size-2.5 shrink-0 rounded-full" style={{ background: SEMAFORO_DOT[detail.state] }} />}
               Detalle de la conversación
+              {detail && <CopyButton value={detail.id} label={`#${detail.id.slice(0, 8)}`} />}
             </DialogTitle>
             <DialogDescription>
               Datos sensibles (nombre, monto, documento) redactados automáticamente antes de mostrarse.
@@ -96,9 +120,14 @@ export function ConversationSemaforoList({ conversations }: Props) {
           {detail && status === 'idle' && (
             <div className="flex flex-col gap-3">
               {detail.escalated && (
-                <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  Escalada a asesor humano — motivo: {detail.escalationReason ?? 'No especificado'}
-                </p>
+                <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  <p>Escalada a asesor humano — motivo: {detail.escalationReason ?? 'No especificado'}</p>
+                  {detail.escalationTicketId && (
+                    <p className="mt-1 flex items-center gap-1.5">
+                      Ticket: <CopyButton value={detail.escalationTicketId} label={detail.escalationTicketId} />
+                    </p>
+                  )}
+                </div>
               )}
               <div className="flex max-h-[50vh] flex-col gap-2 overflow-y-auto pr-1">
                 {detail.messages.length === 0 && (
