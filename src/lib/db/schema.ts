@@ -22,6 +22,14 @@ export const conversations = pgTable(
     demoType: text('demo_type').notNull(),
     sessionId: text('session_id'),
     userId: uuid('user_id'),
+    // Omnichannel thread anchor: the authenticated demo customer this
+    // conversation belongs to (null for `demo-` tokens with no real customer).
+    // Lets us reconstruct "everything this customer did across every channel".
+    customerId: uuid('customer_id'),
+    // Which channel this conversation came in on: web | voz | whatsapp | ivr.
+    // Makes the omnichannel story queryable and drives the cross-channel memory
+    // block injected into the agent.
+    channel: text('channel'),
     messages: jsonb('messages').default(sql`'[]'::jsonb`),
     metadata: jsonb('metadata').default(sql`'{}'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
